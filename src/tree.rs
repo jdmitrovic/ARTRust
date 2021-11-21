@@ -1,8 +1,6 @@
 use crate::{ ARTree, ARTKey };
 use crate::node::{ ARTLink, ARTNode, ARTLeaf, ARTInnerNode};
 
-use std::mem;
-
 impl ARTree {
     pub fn new() -> Self {
         ARTree {
@@ -12,13 +10,17 @@ impl ARTree {
 
     pub fn insert<K: ARTKey, V>(&mut self, key: K, value: V) {
         match self.root {
-            None => mem::replace(&mut self.root, Some(ARTLeaf::new(key, value))),
+            None => self.root.insert(Box::new(ARTNode::Leaf(ARTLeaf::new(key, value)))),
             Some(node) => {
                 match node {
-                    Leaf(leaf_node) => {
+                    ARTNode::Leaf(_) => {
+                        let old_root = self.root.replace(ARTInnerNode::<K, V>::new_inner_4());
+                        return
                     }
+                    ARTNode::Inner(node) => {}
                 }
             }
         }
     }
+
 }

@@ -34,23 +34,38 @@ impl<K: ARTKey, V> ARTLeaf<K, V> {
 }
 
 impl<K: ARTKey, V> ARTInnerNode<K, V> {
-    fn new_inner4() -> ARTInnerNode<K, V> {
+    fn new_inner_4() -> ARTInnerNode<K, V> {
         ARTInnerNode::Inner4 {
             keys: [None; 4],
             children: [None; 4],
         }
     }
 
-    fn insert(&mut self, key: K, value: V) -> &ARTLeaf<K, V> {
-        let key_bytes : Vec<u8> = key.convert_into_bytes();
+    fn new_inner_256() -> ARTInnerNode<K, V> {
+        ARTInnerNode::Inner256 {
+            children: [None; 256],
+        }
+    }
 
+    fn add_child(&mut self, key: K, value: V, key_byte: u8) -> &ARTLeaf<K, V> {
+        self.add_node(Box::new(ARTNode::Leaf(ARTLeaf::new(key, value))), key_byte)
+    }
+
+    fn add_node(&mut self, new_node: ARTNode<K, V>, key_byte: u8) -> &ARTNode<K, V> {
         match self {
             ARTInnerNode::Inner4 { keys, children } => {
-                for k in keys {
-                    let byte_check = k.get_or_insert();
+                for (key, child) in self.keys.zip(self.children) {
+                    if key != None { continue; }
+
+                    key.insert(key_byte);
+                    child.insert(new_node)
                 }
+
+               // node.grow()
             }
-            ARTInnerNode::Inner256 { children } => {},
+            ARTInnerNode::Inner256 { children } => {
+                children[key_byte].insert(new_node)
+            },
         }
     }
 }
