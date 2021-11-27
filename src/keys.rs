@@ -2,7 +2,7 @@ use crate::ARTKey;
 
 impl ARTKey for String {
     fn convert_to_bytes(&self) -> Vec<u8> {
-        self.into_bytes()
+        self.clone().into_bytes()
     }
 }
 

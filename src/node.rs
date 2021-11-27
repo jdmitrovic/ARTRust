@@ -7,7 +7,7 @@ pub enum ARTNode<K: ARTKey, V> {
     Leaf(Box<ARTLeaf<K, V>>),
 }
 
-pub type ARTLink<K: ARTKey, V> = Option<ARTNode<K, V>>;
+pub type ARTLink<K, V> = Option<ARTNode<K, V>>;
 
 pub enum ARTInnerNode<K: ARTKey, V> {
     Inner4(Box<ARTInner4<K, V>>),
@@ -85,7 +85,7 @@ impl<K: ARTKey, V> ARTInnerNode<K, V> {
     pub fn add_node(&mut self, new_node: ARTNode<K, V>, key_byte: u8) {
         match self {
             ARTInnerNode::Inner4(node) => {
-                for (i, key) in node.keys.iter().enumerate() {
+                for (i, key) in node.keys.iter_mut().enumerate() {
                     match key {
                         Some(_) => continue,
                         None => {
@@ -144,7 +144,7 @@ impl<'a, K: ARTKey, V> Iterator for Iter<'a, K, V> {
 
                     pos.map(|i| {
                         self.depth += 1;
-                        node.children[i]
+                        &node.children[i]
                     }).expect("There should be a node in this position")
                 }
 
@@ -152,7 +152,7 @@ impl<'a, K: ARTKey, V> Iterator for Iter<'a, K, V> {
                     let key_byte: u8 = self.key_bytes[self.depth as usize];
                     self.depth += 1;
 
-                    node.children[key_byte as usize]
+                    &node.children[key_byte as usize]
                 }
             };
 
