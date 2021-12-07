@@ -1,19 +1,19 @@
 use crate::ARTKey;
 
 impl ARTKey for String {
-    fn convert_to_bytes(&self) -> Vec<u8> {
-        self.clone().into_bytes()
+    fn convert_to_bytes(self) -> Vec<u8> {
+        self.into_bytes()
     }
 }
 
 macro_rules! ArtKeyNumImpl {
 	($sty: ty) => {
         impl ARTKey for $sty {
-            fn convert_to_bytes(&self) -> Vec<u8> {
+            fn convert_to_bytes(self) -> Vec<u8> {
                 self.to_be_bytes().to_vec()
             }
         }
-	};
+	}
 }
 
 ArtKeyNumImpl!(u16);

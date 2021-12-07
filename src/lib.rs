@@ -11,11 +11,13 @@ mod tests {
 }
 
 use node::ARTLink;
+use std::marker::PhantomData;
 
 pub trait ARTKey {
-    fn convert_to_bytes(&self) -> Vec<u8>;
+    fn convert_to_bytes(self) -> Vec<u8>;
 }
 
 pub struct ARTree<K: ARTKey, V> {
-    root: ARTLink<K, V>,
+    root: ARTLink<V>,
+    _marker: PhantomData<K>,
 }

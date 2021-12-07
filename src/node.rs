@@ -1,4 +1,5 @@
-use std::mem::{ self, MaybeUninit };
+use std::{marker::PhantomData, mem::{ self, MaybeUninit }};
+use std::rc::Rc;
 
 use crate::ARTKey;
 
@@ -8,51 +9,52 @@ pub enum ARTNode<K: ARTKey, V> {
 }
 
 pub type ARTLink<K, V> = Option<ARTNode<K, V>>;
+pub type ByteKey = Rc<Vec<u8>>;
 
-pub enum ARTInnerNode<K: ARTKey, V> {
+pub enum ARTInnerNode<K, V> {
     Inner4(Box<ARTInner4<K, V>>),
     Inner256(Box<ARTInner256<K, V>>),
 }
 
 pub struct ARTInner4<K: ARTKey, V> {
-    partial_key: Vec<u8>,
+    partial_key: ByteKey,
+    pkey_size: u8,
     keys: [Option<u8>; 4],
     children: [ARTLink<K, V>; 4],
 }
 
 pub struct ARTInner256<K: ARTKey, V> {
-    partial_key: Vec<u8>,
+    partial_key: ByteKey,
+    pkey_size: u8,
     children: [ARTLink<K, V>; 256],
 }
 
 pub struct ARTLeaf<K: ARTKey, V>{
-    key: K,
+    key: Key,
     value: V,
+    _marker: PhantomData<K>,
 }
 
 impl<K: ARTKey, V> ARTLeaf<K, V> {
     pub fn new(key: K, value: V) -> Self {
         ARTLeaf {
-            key,
+            key: Rc::new(key.convert_to_bytes()),
             value,
+            _marker: PhantomData,
         }
-    }
-
-    pub fn key(&self) -> &K {
-        &self.key
     }
 }
 
-impl<K: ARTKey, V> ARTInnerNode<K, V> {
-    pub fn new_inner_4() -> ARTInnerNode<K, V> {
+impl<K, V> ARTInnerNode<K, V> {
+    pub fn new_inner_4(key: &ByteKey) -> ARTInnerNode<K, V> {
         ARTInnerNode::Inner4(Box::new(ARTInner4 {
             keys: Default::default(),
             children: Default::default(),
-            partial_key: vec![],
+            partial_key: Rc::clone(key),
         }))
     }
 
-    pub fn new_inner_256() -> ARTInnerNode<K, V> {
+    pub fn new_inner_256(key: &ByteKey) -> ARTInnerNode<K, V> {
         let children = {
             let mut arr: [MaybeUninit<Option<ARTNode<K, V>>>; 256] = unsafe {
                 MaybeUninit::uninit().assume_init()
@@ -66,19 +68,19 @@ impl<K: ARTKey, V> ARTInnerNode<K, V> {
         };
 
         ARTInnerNode::Inner256(Box::new(ARTInner256 {
-            partial_key: vec![],
+            partial_key: Rc::clone(key),
             children
         }))
     }
 
-    fn partial_key(&self) -> &Vec<u8> {
+    fn partial_key(&self) -> u8 {
         match self {
-            ARTInnerNode::Inner4(node) => node.partial_key.as_ref(),
-            ARTInnerNode::Inner256(node) => node.partial_key.as_ref()
+            ARTInnerNode::Inner4(node) => node.pkey_size,
+            ARTInnerNode::Inner256(node) => node.pkey_size,
         }
     }
 
-    pub fn add_child(&mut self, key: K, value: V, key_byte: u8) {
+    pub fn add_child(&mut self, key: Vec<u8>, value: V, key_byte: u8) {
         self.add_node(ARTNode::Leaf(Box::new(ARTLeaf::new(key, value))), key_byte)
     }
 
@@ -104,28 +106,75 @@ impl<K: ARTKey, V> ARTInnerNode<K, V> {
         }
     }
 
-    pub fn iter(&self, key: K) -> Iter<K, V> {
+    pub fn iter(&self, key: &K) -> Iter<K, V> {
         Iter {
             next: Some(self),
             key_bytes: key.convert_to_bytes(),
             depth: 0,
         }
     }
+
+    pub fn insert(&mut self, key_bytes: Vec<u8>, value: V) {
+        let mut current = self;
+        let mut depth: usize = 0;
+
+        let inner_node: &ARTInnerNode<K, V> = loop {
+            let potential_next: Option<&mut ARTNode<K, V>> = match current {
+                    ARTInnerNode::Inner4(node) => {
+                    depth += node.partial_key.len();
+
+                    let key_byte = key_bytes[depth as usize];
+                    let pos = node.keys.iter().position(|k| {
+                        match k {
+                            None => false,
+                            Some(x) => *x == key_byte,
+                        }
+                    });
+
+                    match pos {
+                        None => None,
+                        Some(i) => node.children[i].as_mut()
+                    }
+                }
+
+                ARTInnerNode::Inner256(node) => {
+                    let key_byte: u8 = key_bytes[depth as usize];
+                    node.children[key_byte as usize].as_mut()
+                }
+            };
+
+            depth += 1;
+
+            if let Some(ARTNode::Inner(pn_inner)) = potential_next {
+                let pk = &key_bytes[depth..depth+current.pkey_size];
+                if pn_inner.partial_key().iter().zip(pk).all(|(a, b)| a == b) == true {
+                    current = pn_inner;
+                } else {
+                    break current;
+                }
+            } else {
+                break current;
+            }
+        };
+
+        inner_node.add_child(key_bytes, value, key_bytes[depth]);
+    }
+
 }
 
-impl<K: ARTKey, V> ARTInner4<K, V> {
+impl<K, V> ARTInner4<K, V> {
     fn grow(&mut self) -> ARTNode<K, V> {
-        ARTNode::Inner(ARTInnerNode::new_inner_256())
+        ARTNode::Inner(ARTInnerNode::new_inner_256(&self.key))
     } 
 }
 
-pub struct Iter<'a, K: ARTKey, V> {
+pub struct Iter<'a, K, V> {
     next: Option<&'a ARTInnerNode<K, V>>,
     key_bytes: Vec<u8>,
     depth: u32,
 }
 
-impl<'a, K: ARTKey, V> Iterator for Iter<'a, K, V> {
+impl<'a, K, V> Iterator for Iter<'a, K, V> {
     type Item = &'a ARTInnerNode<K, V>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -171,3 +220,4 @@ impl<'a, K: ARTKey, V> Iterator for Iter<'a, K, V> {
         })
     }
 }
+
