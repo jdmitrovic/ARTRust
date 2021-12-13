@@ -1,4 +1,5 @@
 use crate::ARTKey;
+use std::rc::Rc;
 
 impl ARTKey for String {
     fn convert_to_bytes(self) -> Vec<u8> {
@@ -26,3 +27,5 @@ ArtKeyNumImpl!(usize);
 ArtKeyNumImpl!(isize);
 ArtKeyNumImpl!(f32);
 ArtKeyNumImpl!(f64);
+
+pub type ByteKey = Rc<Vec<u8>>;

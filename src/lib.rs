@@ -18,6 +18,6 @@ pub trait ARTKey {
 }
 
 pub struct ARTree<K: ARTKey, V> {
-    root: ARTLink<V>,
+    root: ARTLink<K, V>,
     _marker: PhantomData<K>,
 }
