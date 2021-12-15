@@ -29,3 +29,15 @@ ArtKeyNumImpl!(f32);
 ArtKeyNumImpl!(f64);
 
 pub type ByteKey = Rc<Vec<u8>>;
+
+pub enum PartialKeyComp {
+    PartialMatch(usize),
+    FullMatch(usize),
+}
+
+pub fn compare_pkeys(pkey_1: &[u8], pkey_2: &[u8]) -> PartialKeyComp {
+        match pkey_1.iter().zip(pkey_2.iter()).position(|(a, b)| a != b) {
+            None => PartialKeyComp::FullMatch(std::cmp::min(pkey_1.len(), pkey_2.len())),
+            Some(pos) => PartialKeyComp::PartialMatch(pos),
+        }
+}
