@@ -1,14 +1,6 @@
-mod node;
-mod tree;
-mod keys;
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
-    }
-}
+pub mod node;
+pub mod tree;
+pub mod keys;
 
 use node::ARTLink;
 use std::marker::PhantomData;
@@ -20,4 +12,21 @@ pub trait ARTKey {
 pub struct ARTree<K: ARTKey, V> {
     root: ARTLink<K, V>,
     _marker: PhantomData<K>,
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::ARTree;
+    #[test]
+    fn it_works() {
+        // assert_eq!(2 + 2, 4);
+
+        let mut art: ARTree<String, u32> = ARTree::new();
+
+        art.insert(String::from("Jovan"), 26);
+        art.insert(String::from("Djordje"), 21);
+        art.insert(String::from("Nenad"), 54);
+
+        assert_eq!(25, *art.find(String::from("Djordje")).unwrap());
+    }
 }

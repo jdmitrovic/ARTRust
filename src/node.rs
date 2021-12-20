@@ -1,4 +1,4 @@
-use std::{marker::PhantomData, mem::{ self, MaybeUninit }, ops::Deref};
+use std::{marker::PhantomData, mem::{ self, MaybeUninit }};
 use std::rc::Rc;
 
 use crate::ARTKey;
@@ -49,10 +49,18 @@ impl<K: ARTKey, V> ARTLeaf<K, V> {
             _marker: PhantomData,
         }
     }
+
+    pub fn key(&self) -> &[u8] {
+        &self.key
+    }
+
+    pub fn value(&self) -> &V {
+        &self.value
+    }
 }
 
 impl<K: ARTKey, V> ARTInnerNode<K, V> {
-    pub fn new_inner_4(key: &ByteKey, pkey_size: u8) -> ARTInnerNode<K, V> {
+    pub fn new_inner_4(pkey_size: u8) -> ARTInnerNode<K, V> {
         ARTInnerNode::Inner4(Box::new(ARTInner4 {
             keys: Default::default(),
             children: Default::default(),
@@ -60,7 +68,7 @@ impl<K: ARTKey, V> ARTInnerNode<K, V> {
         }))
     }
 
-    pub fn new_inner_256(pkey: &ByteKey, pkey_size: u8) -> ARTInnerNode<K, V> {
+    pub fn new_inner_256(pkey_size: u8) -> ARTInnerNode<K, V> {
         let children = {
             let mut arr: [MaybeUninit<Option<ARTNode<K, V>>>; 256] = unsafe {
                 MaybeUninit::uninit().assume_init()
@@ -121,7 +129,7 @@ impl<K: ARTKey, V> ARTInnerNode<K, V> {
     }
 
 
-    pub fn find_child(&mut self, key_byte: u8) -> ARTLink<K, V> {
+    pub fn find_child_mut(&mut self, key_byte: u8) -> ARTLink<K, V> {
         match self {
             ARTInnerNode::Inner4(node) => {
                 let pos = node.keys.iter().position(|k| {
@@ -135,6 +143,23 @@ impl<K: ARTKey, V> ARTInnerNode<K, V> {
             }
 
             ARTInnerNode::Inner256(node) => node.children[key_byte as usize].take(),
+        }
+    }
+
+    pub fn find_child(&self, key_byte: u8) -> Option<&ARTNode<K, V>> {
+        match self {
+            ARTInnerNode::Inner4(node) => {
+                let pos = node.keys.iter().position(|k| {
+                    match k {
+                        None => false,
+                        Some(x) => *x == key_byte,
+                    }
+                });
+
+                pos.map(move |i| node.children[i].as_ref()).flatten()
+            }
+
+            ARTInnerNode::Inner256(node) => node.children[key_byte as usize].as_ref(),
         }
     }
 }
