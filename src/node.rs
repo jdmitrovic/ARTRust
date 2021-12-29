@@ -5,7 +5,7 @@ use crate::ARTKey;
 use crate::keys::{*};
 
 pub enum ARTNode<K: ARTKey, V> {
-    Inner(ARTInnerNode<K, V>, ByteKey),
+    Inner(Box<ARTInnerNode<K, V>>, ByteKey),
     Leaf(ARTLeaf<K, V>),
 }
 
@@ -60,12 +60,12 @@ impl<K: ARTKey, V> ARTLeaf<K, V> {
 }
 
 impl<'a, K: ARTKey, V> ARTInnerNode<K, V> {
-    pub fn new_inner_4(pkey_size: u8) -> ARTInnerNode<K, V> {
-        ARTInnerNode::Inner4(ARTInner4 {
+    pub fn new_inner_4(pkey_size: u8) -> Box<ARTInnerNode<K, V>> {
+        Box::new(ARTInnerNode::Inner4(ARTInner4 {
             keys: Default::default(),
             children: Default::default(),
             pkey_size
-        })
+        }))
     }
 
     pub fn new_inner_256(pkey_size: u8) -> ARTInnerNode<K, V> {
@@ -120,7 +120,7 @@ impl<'a, K: ARTKey, V> ARTInnerNode<K, V> {
         }
     }
 
-    pub fn find_child_mut(&'a mut self, key_byte: u8) -> Option<&'a mut ARTLink<K, V>> {
+    pub fn find_child_mut(&mut self, key_byte: u8) -> Option<*mut ARTLink<K, V>> {
         match self {
             ARTInnerNode::Inner4(node) => {
                 let pos = node.keys.iter().position(|k| {
@@ -130,10 +130,10 @@ impl<'a, K: ARTKey, V> ARTInnerNode<K, V> {
                     }
                 });
 
-                pos.map(move |i| &mut node.children[i])
+                pos.map(move |i| &mut node.children[i] as *mut ARTLink<K, V>)
             }
 
-            ARTInnerNode::Inner256(node) => Some(&mut node.children[key_byte as usize]),
+            ARTInnerNode::Inner256(node) => Some(&mut node.children[key_byte as usize] as *mut ARTLink<K, V>),
         }
     }
 

@@ -1,3 +1,5 @@
+#![feature(box_patterns)]
+
 pub mod node;
 pub mod tree;
 pub mod keys;
@@ -26,7 +28,8 @@ mod tests {
         art.insert(String::from("Jovan"), 26);
         art.insert(String::from("Djordje"), 21);
         art.insert(String::from("Nenad"), 54);
+        art.insert(String::from("Joca"), 22);
 
-        assert_eq!(25, *art.find(String::from("Djordje")).unwrap());
+        assert_eq!(25, *art.find(String::from("Joca")).unwrap());
     }
 }
