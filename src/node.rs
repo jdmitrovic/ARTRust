@@ -13,6 +13,7 @@ pub type ARTLink<K, V> = Option<Box<ARTNode<K, V>>>;
 
 pub enum ARTInnerNode<K: ARTKey, V> {
     Inner4(ARTInner4<K, V>),
+    Inner48(ARTInner48<K, V>),
     Inner256(ARTInner256<K, V>),
 }
 
@@ -20,11 +21,20 @@ pub struct ARTInner4<K: ARTKey, V> {
     pkey_size: u8,
     keys: [Option<u8>; 4],
     children: [ARTLink<K, V>; 4],
+    children_num: u8,
+}
+
+pub struct ARTInner48<K: ARTKey, V> {
+    pkey_size: u8,
+    keys: [Option<u8>; 256],
+    children: [ARTLink<K, V>; 48],
+    children_num: u8,
 }
 
 pub struct ARTInner256<K: ARTKey, V> {
     pkey_size: u8,
     children: [ARTLink<K, V>; 256],
+    children_num: u8,
 }
 
 pub struct ARTLeaf<K: ARTKey, V>{
@@ -59,37 +69,76 @@ impl<K: ARTKey, V> ARTLeaf<K, V> {
     }
 }
 
+macro_rules! initialize_children_array {
+    ($l: tt) => {{
+        let mut arr: [MaybeUninit<Option<Box<ARTNode<K, V>>>>; $l] = unsafe {
+            MaybeUninit::uninit().assume_init()
+        };
+
+        for item in &mut arr[..] {
+            item.write(None);
+        }
+
+        unsafe { mem::transmute::<_, [Option<Box<ARTNode<K, V>>>; $l]>(arr) }
+    }};
+}
+
 impl<'a, K: ARTKey, V> ARTInnerNode<K, V> {
     pub fn new_inner_4(pkey_size: u8) -> Box<ARTInnerNode<K, V>> {
         Box::new(ARTInnerNode::Inner4(ARTInner4 {
             keys: Default::default(),
             children: Default::default(),
-            pkey_size
+            pkey_size,
+            children_num: 0
         }))
     }
 
-    pub fn new_inner_256(pkey_size: u8) -> ARTInnerNode<K, V> {
-        let children = {
-            let mut arr: [MaybeUninit<Option<Box<ARTNode<K, V>>>>; 256] = unsafe {
-                MaybeUninit::uninit().assume_init()
-            };
 
-            for item in &mut arr[..] {
-                item.write(None);
-            }
+    // pub fn new_inner_48(pkey_size: u8) -> Box<ARTInnerNode<K, V>> {
+    //     let children = {
+    //         let mut arr: [MaybeUninit<Option<Box<ARTNode<K, V>>>>; 48] = unsafe {
+    //             MaybeUninit::uninit().assume_init()
+    //         };
 
-            unsafe { mem::transmute::<_, [Option<Box<ARTNode<K, V>>>; 256]>(arr) }
-        };
+    //         for item in &mut arr[..] {
+    //             item.write(None);
+    //         }
 
-        ARTInnerNode::Inner256(ARTInner256 {
-            children,
-            pkey_size,
-        })
-    }
+    //         unsafe { mem::transmute::<_, [Option<Box<ARTNode<K, V>>>; 48]>(arr) }
+    //     };
+
+    //     Box::new(ARTInnerNode::Inner48(ARTInner48 {
+    //         keys: Default::default(),
+    //         children,
+    //         children_num: 0,
+    //         pkey_size,
+    //     }))
+    // }
+
+    // pub fn new_inner_256(pkey_size: u8) -> Box<ARTInnerNode<K, V>> {
+    //     let children = {
+    //         let mut arr: [MaybeUninit<Option<Box<ARTNode<K, V>>>>; 256] = unsafe {
+    //             MaybeUninit::uninit().assume_init()
+    //         };
+
+    //         for item in &mut arr[..] {
+    //             item.write(None);
+    //         }
+
+    //         unsafe { mem::transmute::<_, [Option<Box<ARTNode<K, V>>>; 256]>(arr) }
+    //     };
+
+    //     Box::new(ARTInnerNode::Inner256(ARTInner256 {
+    //         children,
+    //         children_num: 0,
+    //         pkey_size,
+    //     }))
+    // }
 
     pub fn partial_key_size(&self) -> u8 {
         match self {
             ARTInnerNode::Inner4(node) => node.pkey_size,
+            ARTInnerNode::Inner48(node) => node.pkey_size,
             ARTInnerNode::Inner256(node) => node.pkey_size,
         }
     }
@@ -114,6 +163,11 @@ impl<'a, K: ARTKey, V> ARTInnerNode<K, V> {
 
                // node.grow();
             }
+            ARTInnerNode::Inner48(node) => {
+                node.children[node.children_num as usize] = Some(new_node);
+                node.keys[key_byte as usize] = Some(node.children_num);
+                node.children_num += 1;
+            }
             ARTInnerNode::Inner256(node) => {
                 node.children[key_byte as usize].replace(new_node).unwrap();
             }
@@ -132,7 +186,10 @@ impl<'a, K: ARTKey, V> ARTInnerNode<K, V> {
 
                 pos.map(move |i| &mut node.children[i] as *mut ARTLink<K, V>)
             }
-
+            ARTInnerNode::Inner48(node) => {
+                let index = node.keys[key_byte as usize];
+                index.map(|i| &mut node.children[i as usize] as *mut ARTLink<K, V>)
+            }
             ARTInnerNode::Inner256(node) => Some(&mut node.children[key_byte as usize] as *mut ARTLink<K, V>),
         }
     }
@@ -150,13 +207,35 @@ impl<'a, K: ARTKey, V> ARTInnerNode<K, V> {
                 pos.map(move |i| node.children[i].as_ref()).flatten()
             }
 
+            ARTInnerNode::Inner48(node) => {
+                let index = node.keys[key_byte as usize];
+                index.map(|i| node.children[i as usize].as_ref()).flatten()
+            }
             ARTInnerNode::Inner256(node) => node.children[key_byte as usize].as_ref(),
+        }
+    }
+
+    pub fn grow(self) -> ARTInnerNode<K, V> {
+        match self {
+            ARTInnerNode::Inner4(inner_node) => {
+                unimplemented!();
+            }
+            ARTInnerNode::Inner48(mut inner_node) => {
+                let mut new_child_array = initialize_children_array!(256);
+
+                for i in 0..inner_node.keys.len() {
+                    if let Some(old_index) = inner_node.keys[i] {
+                        new_child_array[i] = inner_node.children[old_index as usize].take();
+                    }
+                }
+                ARTInnerNode::Inner256(ARTInner256 {
+                    pkey_size: inner_node.pkey_size,
+                    children: new_child_array,
+                    children_num: inner_node.children_num,
+                })
+            }
+            ARTInnerNode::Inner256(_) => panic!("This node cannot grow!"),
         }
     }
 }
 
-impl<K: ARTKey, V> ARTInner4<K, V> {
-    // fn grow(&mut self) -> ARTNode<K, V> {
-    //     ARTNode::Inner(ARTInnerNode::new_inner_256(&self.keys, self.pkey_size))
-    // }
-}
