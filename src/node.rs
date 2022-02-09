@@ -1,5 +1,11 @@
-use std::{marker::PhantomData, mem::{ self, MaybeUninit }};
+use std::{marker::PhantomData, mem::{ self, MaybeUninit }, arch::x86_64::_mm_setr_epi8};
 use std::rc::Rc;
+
+use std::arch::x86_64::_mm_set1_epi8;
+use std::arch::x86_64::_mm_cmpeq_epi8;
+use std::arch::x86_64::_mm_movemask_epi8;
+use std::arch::x86_64::_mm_xor_si128;
+use std::arch::x86_64::_mm_slli_si128;
 
 use crate::ARTKey;
 use crate::keys::{*};
@@ -13,6 +19,7 @@ pub type ARTLink<K, V> = Option<Box<ARTNode<K, V>>>;
 
 pub enum ARTInnerNode<K: ARTKey, V> {
     Inner4(ARTInner4<K, V>),
+    Inner16(ARTInner16<K, V>),
     Inner48(ARTInner48<K, V>),
     Inner256(ARTInner256<K, V>),
 }
@@ -21,6 +28,15 @@ pub struct ARTInner4<K: ARTKey, V> {
     pkey_size: u8,
     keys: [Option<u8>; 4],
     children: [ARTLink<K, V>; 4],
+    children_num: u8,
+}
+
+use std::arch::x86_64::__m128i;
+
+pub struct ARTInner16<K: ARTKey, V> {
+    pkey_size: u8,
+    keys: __m128i,
+    children: [ARTLink<K, V>; 16],
     children_num: u8,
 }
 
@@ -138,6 +154,7 @@ impl<'a, K: ARTKey, V> ARTInnerNode<K, V> {
     pub fn partial_key_size(&self) -> u8 {
         match self {
             ARTInnerNode::Inner4(node) => node.pkey_size,
+            ARTInnerNode::Inner16(node) => node.pkey_size,
             ARTInnerNode::Inner48(node) => node.pkey_size,
             ARTInnerNode::Inner256(node) => node.pkey_size,
         }
@@ -160,8 +177,13 @@ impl<'a, K: ARTKey, V> ARTInnerNode<K, V> {
                         }
                     }
                 }
-
-               // node.grow();
+            }
+            ARTInnerNode::Inner16(node) => {
+                unsafe {
+                    let shifted = _mm_slli_si128::<1>(node.keys);
+                    let new_key = _mm_setr_epi8(key_byte as i8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+                    node.keys = _mm_xor_si128(shifted, new_key);
+                }
             }
             ARTInnerNode::Inner48(node) => {
                 node.children[node.children_num as usize] = Some(new_node);
@@ -186,6 +208,18 @@ impl<'a, K: ARTKey, V> ARTInnerNode<K, V> {
 
                 pos.map(move |i| &mut node.children[i] as *mut ARTLink<K, V>)
             }
+            ARTInnerNode::Inner16(node) => {
+                let key = unsafe { _mm_set1_epi8(key_byte as i8) };
+                let cmp = unsafe { _mm_cmpeq_epi8(key, node.keys) };
+                let mask = (1 << node.children_num) - 1;
+                let bitfield = unsafe { _mm_movemask_epi8(cmp) & mask };
+
+                if bitfield > 0 {
+                    Some(&mut node.children[bitfield.trailing_zeros() as usize] as *mut ARTLink<K, V>)
+                } else {
+                    None
+                }
+            }
             ARTInnerNode::Inner48(node) => {
                 let index = node.keys[key_byte as usize];
                 index.map(|i| &mut node.children[i as usize] as *mut ARTLink<K, V>)
@@ -206,7 +240,18 @@ impl<'a, K: ARTKey, V> ARTInnerNode<K, V> {
 
                 pos.map(move |i| node.children[i].as_ref()).flatten()
             }
+            ARTInnerNode::Inner16(node) => {
+                let key = unsafe { _mm_set1_epi8(key_byte as i8) };
+                let cmp = unsafe { _mm_cmpeq_epi8(key, node.keys) };
+                let mask = (1 << node.children_num) - 1;
+                let bitfield = unsafe { _mm_movemask_epi8(cmp) & mask };
 
+                if bitfield > 0 {
+                    node.children[bitfield.trailing_zeros() as usize].as_ref()
+                } else {
+                    None
+                }
+            }
             ARTInnerNode::Inner48(node) => {
                 let index = node.keys[key_byte as usize];
                 index.map(|i| node.children[i as usize].as_ref()).flatten()
@@ -218,6 +263,9 @@ impl<'a, K: ARTKey, V> ARTInnerNode<K, V> {
     pub fn grow(self) -> ARTInnerNode<K, V> {
         match self {
             ARTInnerNode::Inner4(inner_node) => {
+                unimplemented!();
+            }
+            ARTInnerNode::Inner16(inner_node) => {
                 unimplemented!();
             }
             ARTInnerNode::Inner48(mut inner_node) => {
