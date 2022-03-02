@@ -5,3 +5,4 @@ authors = ["jovan <jdmitrovic@gmail.com>"]
 edition = "2018"
 
 [dependencies]
+crunchy = "0.2.2"

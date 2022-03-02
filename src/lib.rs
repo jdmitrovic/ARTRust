@@ -11,7 +11,7 @@ pub trait ARTKey {
     fn convert_to_bytes(self) -> Vec<u8>;
 }
 
-pub struct ARTree<K: ARTKey, V> {
+pub struct ARTree<K: ARTKey, V: Clone> {
     root: ARTLink<K, V>,
     _marker: PhantomData<K>,
 }
