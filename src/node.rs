@@ -13,24 +13,21 @@ use std::arch::x86_64::_mm_setr_epi8;
 use crate::ARTKey;
 use crate::keys::{*};
 
-#[derive(Clone)]
-pub enum ARTNode<K: ARTKey, V: Clone> {
+pub enum ARTNode<K: ARTKey, V> {
     Inner(Box<ARTInnerNode<K, V>>, ByteKey),
     Leaf(ARTLeaf<K, V>),
 }
 
 pub type ARTLink<K, V> = Option<Box<ARTNode<K, V>>>;
 
-#[derive(Clone)]
-pub enum ARTInnerNode<K: ARTKey, V: Clone> {
+pub enum ARTInnerNode<K: ARTKey, V> {
     Inner4(ARTInner4<K, V>),
     Inner16(ARTInner16<K, V>),
     Inner48(ARTInner48<K, V>),
     Inner256(ARTInner256<K, V>),
 }
 
-#[derive(Clone)]
-pub struct ARTInner4<K: ARTKey, V: Clone> {
+pub struct ARTInner4<K: ARTKey, V> {
     pkey_size: u8,
     keys: [Option<u8>; 4],
     children: [ARTLink<K, V>; 4],
@@ -39,37 +36,33 @@ pub struct ARTInner4<K: ARTKey, V: Clone> {
 
 use std::arch::x86_64::__m128i;
 
-#[derive(Clone)]
-pub struct ARTInner16<K: ARTKey, V: Clone> {
+pub struct ARTInner16<K: ARTKey, V> {
     pkey_size: u8,
     keys: __m128i,
     children: [ARTLink<K, V>; 16],
     children_num: u8,
 }
 
-#[derive(Clone)]
-pub struct ARTInner48<K: ARTKey, V: Clone> {
+pub struct ARTInner48<K: ARTKey, V> {
     pkey_size: u8,
     keys: [Option<u8>; 256],
     children: [ARTLink<K, V>; 48],
     children_num: u8,
 }
 
-#[derive(Clone)]
-pub struct ARTInner256<K: ARTKey, V: Clone> {
+pub struct ARTInner256<K: ARTKey, V> {
     pkey_size: u8,
     children: [ARTLink<K, V>; 256],
     children_num: u8,
 }
 
-#[derive(Clone)]
-pub struct ARTLeaf<K: ARTKey, V: Clone>{
+pub struct ARTLeaf<K: ARTKey, V>{
     key: ByteKey,
     value: V,
     _marker: PhantomData<K>,
 }
 
-impl<K: ARTKey, V: Clone> ARTLeaf<K, V> {
+impl<K: ARTKey, V> ARTLeaf<K, V> {
     pub fn new(byte_key: &ByteKey, value: V) -> Self {
         ARTLeaf {
             key: Rc::clone(byte_key),
@@ -109,7 +102,7 @@ macro_rules! initialize_array {
     }};
 }
 
-impl<'a, K: ARTKey, V: Clone> ARTInnerNode<K, V> {
+impl<'a, K: ARTKey, V> ARTInnerNode<K, V> {
     pub fn new_inner_4(pkey_size: u8) -> Box<ARTInnerNode<K, V>> {
         Box::new(ARTInnerNode::Inner4(ARTInner4 {
             keys: Default::default(),
@@ -304,14 +297,14 @@ impl<'a, K: ARTKey, V: Clone> ARTInnerNode<K, V> {
                     let mut children: [ARTLink<K, V>; 48] = initialize_array!(48, ARTLink<K, V>);
                     let mut keys: [Option<u8>; 256] = initialize_array!(256, Option<u8>);
 
-                    // children[..16].clone_from_slice(&inner_node.children);
                     unroll! {
                         for i in 0..16 {
-                            children[i] = inner_node.children[i];
+                            children[i] = inner_node.children[i].take();
                             let byte = unsafe { _mm_extract_epi8(inner_node.keys, i as i32) };
                             keys[byte as usize] = Some(i as u8);
                         }
                     }
+
                     ARTInnerNode::Inner48(ARTInner48 {
                         children,
                         keys,

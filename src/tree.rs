@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 use std::rc::Rc;
 use crate::keys::*;
 
-impl<'a, K: ARTKey, V: Clone> ARTree<K, V> {
+impl<'a, K: ARTKey, V> ARTree<K, V> {
     pub fn new() -> Self {
         ARTree {
             root: None,
