@@ -11,10 +11,10 @@ use std::arch::x86_64::_mm_slli_si128;
 use std::arch::x86_64::_mm_setr_epi8;
 
 use crate::ARTKey;
-use crate::keys::{*};
+use crate::keys::*;
 
 pub enum ARTNode<K: ARTKey, V> {
-    Inner(Box<ARTInnerNode<K, V>>, ByteKey),
+    Inner(Box<ARTInnerNode<K, V>>, ByteKey, Option<V>),
     Leaf(ARTLeaf<K, V>),
 }
 
@@ -263,6 +263,14 @@ impl<'a, K: ARTKey, V> ARTInnerNode<K, V> {
         }
     }
 
+    pub fn is_full(&self) -> bool {
+        match self {
+            ARTInnerNode::Inner4(ref node)  => node.children_num >= 4,
+            ARTInnerNode::Inner16(ref node) => node.children_num >= 16,
+            ARTInnerNode::Inner48(ref node) => node.children_num >= 48,
+            ARTInnerNode::Inner256(_) => false,
+        }
+    }
     
     pub fn grow(self) -> Box<ARTInnerNode<K, V>> {
         Box::new(
