@@ -163,23 +163,28 @@ impl<'a, K: ARTKey, V> ARTInnerNode<K, V> {
         }
     }
 
+    pub fn reduce_pkey_size(&mut self, r: u8) {
+        match self {
+            ARTInnerNode::Inner4(node) => node.pkey_size -= r,
+            ARTInnerNode::Inner16(node) => node.pkey_size -= r,
+            ARTInnerNode::Inner48(node) => node.pkey_size -= r,
+            ARTInnerNode::Inner256(node) => node.pkey_size -= r,
+        }
+    }
+
     pub fn add_child(&mut self, byte_key: &ByteKey, value: V, key_byte: u8) {
         self.add_node(Box::new(ARTNode::Leaf(ARTLeaf::new(byte_key, value))), key_byte)
     }
 
     pub fn add_node(&mut self, new_node: Box<ARTNode<K, V>>, key_byte: u8) {
+        assert!(self.is_full() == false);
+
         match self {
             ARTInnerNode::Inner4(node) => {
-                for (i, key) in node.keys.iter_mut().enumerate() {
-                    match key {
-                        Some(_) => continue,
-                        None => {
-                            key.replace(key_byte);
-                            node.children[i].replace(new_node);
-                            return;
-                        }
-                    }
-                }
+                let num: usize = node.children_num.into();
+                node.keys[num] = Some(key_byte);
+                node.children[num] = Some(new_node);
+                node.children_num += 1;
             }
             ARTInnerNode::Inner16(node) => {
                 unsafe {
@@ -187,6 +192,7 @@ impl<'a, K: ARTKey, V> ARTInnerNode<K, V> {
                     let new_key = _mm_setr_epi8(key_byte as i8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
                     node.keys = _mm_xor_si128(shifted, new_key);
                 }
+                node.children_num += 1;
             }
             ARTInnerNode::Inner48(node) => {
                 node.children[node.children_num as usize] = Some(new_node);
@@ -195,6 +201,7 @@ impl<'a, K: ARTKey, V> ARTInnerNode<K, V> {
             }
             ARTInnerNode::Inner256(node) => {
                 node.children[key_byte as usize].replace(new_node).unwrap();
+                node.children_num += 1;
             }
         }
     }

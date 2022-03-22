@@ -26,10 +26,11 @@ mod tests {
         let mut art: ARTree<String, u32> = ARTree::new();
 
         art.insert(String::from("Jovan"), 26);
-        art.insert(String::from("Djordje"), 21);
+        // art.insert(String::from("Djordje"), 21);
         art.insert(String::from("Nenad"), 54);
-        art.insert(String::from("Vesna"), 22);
+        // art.insert(String::from("Vesna"), 22);
 
-        assert_eq!(22, *art.find(String::from("Vesna")).unwrap());
+        assert_eq!(26, *art.find(String::from("Jovan")).unwrap());
+        assert_eq!(54, *art.find(String::from("Nenad")).unwrap());
     }
 }
