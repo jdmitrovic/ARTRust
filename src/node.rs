@@ -181,9 +181,9 @@ impl<'a, K: ARTKey, V> ARTInnerNode<K, V> {
 
         match self {
             ARTInnerNode::Inner4(node) => {
-                let num: usize = node.children_num.into();
-                node.keys[num] = Some(key_byte);
-                node.children[num] = Some(new_node);
+                let num = node.children_num as usize;
+                node.keys[num].replace(key_byte);
+                node.children[num].replace(new_node);
                 node.children_num += 1;
             }
             ARTInnerNode::Inner16(node) => {

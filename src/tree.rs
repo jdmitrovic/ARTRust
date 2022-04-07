@@ -24,7 +24,7 @@ impl<'a, K: ARTKey, V> ARTree<K, V> {
 
         while let Some(box ARTNode::Inner(ref mut inner, ref pkey, ref mut val)) = current_link {
             let pk_size = inner.partial_key_size();
-            let current_pkey = &key_bytes[depth..depth+ pk_size as usize + 1];
+            let current_pkey = &key_bytes.get(depth..depth + pk_size as usize).unwrap_or(&key_bytes[depth..]);
 
             match compare_pkeys(pkey, current_pkey) {
                 PartialKeyComp::FullMatch(len) => {
@@ -68,24 +68,24 @@ impl<'a, K: ARTKey, V> ARTree<K, V> {
 
                 match *node {
                     ARTNode::Inner(inner, pkey, val) => {
-
-                        let mut new_inner = if inner.is_full() {
+                        let mut inner = if inner.is_full() {
                             inner.grow()
                         } else {
                             inner
                         };
 
-                        new_inner.add_child(&key_bytes, value, pkey[depth]);
-                        current_link.replace(Box::new(ARTNode::Inner(new_inner,
+                        inner.add_child(&key_bytes, value, key_bytes[depth]);
+                        current_link.replace(Box::new(ARTNode::Inner(inner,
                                                                      pkey,
                                                                      val)));
                         None
                     }
-                    ARTNode::Leaf(_) => {
+                    ARTNode::Leaf(ref leaf) => {
                         let mut new_inner = ARTInnerNode::new_inner_4(0);
                         new_inner.add_child(&key_bytes, value, key_bytes[depth]);
+                        let byte: u8 = leaf.key().get(depth).unwrap().to_owned();
 
-                        new_inner.add_node(node, inner_byte);
+                        new_inner.add_node(node, byte);
                         current_link.replace(Box::new(ARTNode::Inner(new_inner,
                                                                     Rc::clone(&key_bytes),
                                                                     None)));

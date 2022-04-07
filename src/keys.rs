@@ -1,5 +1,6 @@
 use crate::ARTKey;
 use std::rc::Rc;
+use std::iter::zip;
 
 impl ARTKey for String {
     fn convert_to_bytes(self) -> Vec<u8> {
@@ -35,11 +36,21 @@ pub enum PartialKeyComp {
     FullMatch(usize),
 }
 
+// pub fn compare_pkeys(pkey_1: &[u8], pkey_2: &[u8]) -> PartialKeyComp {
+//     match zip(pkey_1, pkey_2).position(|(a, b)| a != b) {
+//         None => PartialKeyComp::FullMatch(std::cmp::min(pkey_1.len(), pkey_2.len())),
+//         Some(pos) => PartialKeyComp::PartialMatch(pos),
+//     }
+// }
+
+
 pub fn compare_pkeys(pkey_1: &[u8], pkey_2: &[u8]) -> PartialKeyComp {
-        match pkey_1.iter().zip(pkey_2.iter()).position(|(a, b)| a != b) {
-            None => PartialKeyComp::FullMatch(std::cmp::min(pkey_1.len(), pkey_2.len())),
-            Some(pos) => PartialKeyComp::PartialMatch(pos),
+    match zip(pkey_1, pkey_2).position(|(a, b)| a != b) {
+        None => {
+            PartialKeyComp::FullMatch(std::cmp::min(pkey_1.len(), pkey_2.len()))
         }
+        Some(pos) => PartialKeyComp::PartialMatch(pos),
+    }
 }
 
 pub enum LeafKeyComp {
