@@ -7,7 +7,7 @@ use std::arch::x86_64::_mm_set1_epi8;
 use std::arch::x86_64::_mm_cmpeq_epi8;
 use std::arch::x86_64::_mm_movemask_epi8;
 use std::arch::x86_64::_mm_xor_si128;
-use std::arch::x86_64::_mm_slli_si128;
+use std::arch::x86_64::_mm_bslli_si128;
 use std::arch::x86_64::_mm_setr_epi8;
 
 use crate::ARTKey;
@@ -188,10 +188,13 @@ impl<'a, K: ARTKey, V> ARTInnerNode<K, V> {
             }
             ARTInnerNode::Inner16(node) => {
                 unsafe {
-                    let shifted = _mm_slli_si128::<1>(node.keys);
-                    let new_key = _mm_setr_epi8(key_byte as i8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
-                    node.keys = _mm_xor_si128(shifted, new_key);
+                    let mask = _mm_setr_epi8(key_byte as i8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+                    let new_key = _mm_bslli_si128::<1>(node.keys);
+                    node.keys = _mm_xor_si128(mask, new_key);
                 }
+
+                let num = node.children_num as usize;
+                node.children[num].replace(new_node);
                 node.children_num += 1;
             }
             ARTInnerNode::Inner48(node) => {
@@ -225,7 +228,8 @@ impl<'a, K: ARTKey, V> ARTInnerNode<K, V> {
                 let bitfield = unsafe { _mm_movemask_epi8(cmp) & mask };
 
                 if bitfield > 0 {
-                    Some(&mut node.children[bitfield.trailing_zeros() as usize] as *mut ARTLink<K, V>)
+                    let index = node.children_num as usize - bitfield.trailing_zeros() as usize - 1;
+                    Some(&mut node.children[index] as *mut ARTLink<K, V>)
                 } else {
                     None
                 }
@@ -257,7 +261,8 @@ impl<'a, K: ARTKey, V> ARTInnerNode<K, V> {
                 let bitfield = unsafe { _mm_movemask_epi8(cmp) & mask };
 
                 if bitfield > 0 {
-                    node.children[bitfield.trailing_zeros() as usize].as_ref()
+                    let index = node.children_num as usize - bitfield.trailing_zeros() as usize - 1;
+                    node.children[index].as_ref()
                 } else {
                     None
                 }
@@ -292,11 +297,11 @@ impl<'a, K: ARTKey, V> ARTInnerNode<K, V> {
                     }
 
                     let keys = unsafe {
-                        _mm_setr_epi8(inner_node.keys[0].unwrap() as i8,
-                                      inner_node.keys[1].unwrap() as i8,
-                                      inner_node.keys[2].unwrap() as i8,
-                                      inner_node.keys[3].unwrap() as i8,
-                                      0,0,0,0,0,0,0,0,0,0,0,0)
+                        _mm_setr_epi8(inner_node.keys[3].unwrap() as i8,
+                                     inner_node.keys[2].unwrap() as i8,
+                                     inner_node.keys[1].unwrap() as i8,
+                                     inner_node.keys[0].unwrap() as i8,
+                                     0,0,0,0,0,0,0,0,0,0,0,0)
                     };
 
                     ARTInnerNode::Inner16(ARTInner16 {
