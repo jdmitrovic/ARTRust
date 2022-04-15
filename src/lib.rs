@@ -25,18 +25,33 @@ mod tests {
 
         let mut art: ARTree<String, u32> = ARTree::new();
 
-        art.insert(String::from("Jovan"), 26);
-        art.insert(String::from("Djordje"), 21);
-        art.insert(String::from("Nenad"), 54);
-        art.insert(String::from("Vesna"), 22);
-        art.insert(String::from("Svetlana"), 55);
-        art.insert(String::from("Gordana"), 75);
+        art.insert(String::from("Jason"), 26);
+        art.insert(String::from("Drake"), 21);
+        art.insert(String::from("Nathaniel"), 54);
+        art.insert(String::from("Velma"), 22);
+        art.insert(String::from("Sabrina"), 55);
+        art.insert(String::from("Mary"), 75);
+        art.insert(String::from("Caleb"), 75);
+        art.insert(String::from("Keith"), 75);
+        art.insert(String::from("Linda"), 75);
+        art.insert(String::from("Tina"), 75);
+        art.insert(String::from("Emily"), 75);
+        art.insert(String::from("Gordon"), 75);
+        art.insert(String::from("Anna"), 75);
+        art.insert(String::from("Haley"), 75);
+        art.insert(String::from("Bruce"), 75);
+        art.insert(String::from("Zane"), 75);
+        art.insert(String::from("Wendell"), 33);
+        art.insert(String::from("Rusty"), 44);
+        art.insert(String::from("Jerry"), 23);
 
-        assert_eq!(26, *art.find(String::from("Jovan")).unwrap());
-        assert_eq!(21, *art.find(String::from("Djordje")).unwrap());
-        assert_eq!(54, *art.find(String::from("Nenad")).unwrap());
-        assert_eq!(22, *art.find(String::from("Vesna")).unwrap());
-        assert_eq!(55, *art.find(String::from("Svetlana")).unwrap());
-        assert_eq!(75, *art.find(String::from("Gordana")).unwrap());
+        assert_eq!(26, *art.find(String::from("Jason")).unwrap());
+        assert_eq!(21, *art.find(String::from("Drake")).unwrap());
+        assert_eq!(54, *art.find(String::from("Nathaniel")).unwrap());
+        assert_eq!(22, *art.find(String::from("Velma")).unwrap());
+        assert_eq!(55, *art.find(String::from("Sabrina")).unwrap());
+        assert_eq!(33, *art.find(String::from("Wendell")).unwrap());
+        assert_eq!(44, *art.find(String::from("Rusty")).unwrap());
+        assert_eq!(23, *art.find(String::from("Jerry")).unwrap());
     }
 }

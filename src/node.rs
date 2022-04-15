@@ -2,7 +2,6 @@ use std::{ marker::PhantomData, mem::{ self, MaybeUninit } };
 use std::rc::Rc;
 
 use crunchy::{self, unroll};
-use std::arch::x86_64::_mm_extract_epi8;
 use std::arch::x86_64::_mm_set1_epi8;
 use std::arch::x86_64::_mm_cmpeq_epi8;
 use std::arch::x86_64::_mm_movemask_epi8;
@@ -317,10 +316,14 @@ impl<'a, K: ARTKey, V> ARTInnerNode<K, V> {
                     let mut children: [ARTLink<K, V>; 48] = initialize_array!(48, ARTLink<K, V>);
                     let mut keys: [Option<u8>; 256] = initialize_array!(256, Option<u8>);
 
+                    let bytes = unsafe {
+                        mem::transmute::<__m128i, [u8; 16]>(inner_node.keys)
+                    };
+
                     unroll! {
                         for i in 0..16 {
                             children[i] = inner_node.children[i].take();
-                            let byte = unsafe { _mm_extract_epi8(inner_node.keys, i as i32) };
+                            let byte = bytes[15 - i];
                             keys[byte as usize] = Some(i as u8);
                         }
                     }

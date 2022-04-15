@@ -38,6 +38,8 @@ impl<'a, K: ARTKey, V> ARTree<K, V> {
                             current_link = unsafe { &mut *link };
                         }
                     }
+
+                    depth += 1;
                 }
                 PartialKeyComp::PartialMatch(len) => {
                     depth += len;
@@ -82,8 +84,11 @@ impl<'a, K: ARTKey, V> ARTree<K, V> {
                     }
                     ARTNode::Leaf(ref leaf) => {
                         let mut new_inner = ARTInnerNode::new_inner_4(0);
+                        // dbg!(key_bytes[depth] as char);
                         new_inner.add_child(&key_bytes, value, key_bytes[depth]);
                         let byte: u8 = leaf.key().get(depth).unwrap().to_owned();
+
+                        // dbg!(byte as char);
 
                         new_inner.add_node(node, byte);
                         current_link.replace(Box::new(ARTNode::Inner(new_inner,
@@ -130,6 +135,7 @@ impl<'a, K: ARTKey, V> ARTree<K, V> {
                                             }
 
                                             current = inner_node.find_child(key_bytes[depth]);
+                                            depth += 1;
                                         }
                                     }
                                 }
