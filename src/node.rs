@@ -85,6 +85,10 @@ impl<K: ARTKey, V> ARTLeaf<K, V> {
     pub fn value(&self) -> &V {
         &self.value
     }
+
+    pub fn change_value(&mut self, val: V) -> V {
+        std::mem::replace(&mut self.value, val)
+    }
 }
 
 macro_rules! initialize_array {

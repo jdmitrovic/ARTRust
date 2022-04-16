@@ -24,7 +24,8 @@ impl<'a, K: ARTKey, V> ARTree<K, V> {
 
         while let Some(box ARTNode::Inner(ref mut inner, ref pkey, ref mut val)) = current_link {
             let pk_size = inner.partial_key_size();
-            let current_pkey = &key_bytes.get(depth..depth + pk_size as usize).unwrap_or(&key_bytes[depth..]);
+            let current_pkey = &key_bytes.get(depth..depth + pk_size as usize)
+                                         .unwrap_or(&key_bytes[depth..]);
 
             match compare_pkeys(pkey, current_pkey) {
                 PartialKeyComp::FullMatch(len) => {
@@ -57,7 +58,7 @@ impl<'a, K: ARTKey, V> ARTree<K, V> {
                 current_link.replace(Box::new(ARTNode::Leaf(ARTLeaf::new(&key_bytes, value))));
                 None
             }
-            Some(node) => {
+            Some(mut node) => {
                 if partial_match {
                     let mut new_inner = ARTInnerNode::new_inner_4(pkey_len as u8);
                     new_inner.add_child(&key_bytes, value, key_bytes[depth]);
@@ -82,19 +83,24 @@ impl<'a, K: ARTKey, V> ARTree<K, V> {
                                                                      val)));
                         None
                     }
-                    ARTNode::Leaf(ref leaf) => {
-                        let mut new_inner = ARTInnerNode::new_inner_4(0);
-                        // dbg!(key_bytes[depth] as char);
-                        new_inner.add_child(&key_bytes, value, key_bytes[depth]);
-                        let byte: u8 = leaf.key().get(depth).unwrap().to_owned();
+                    ARTNode::Leaf(ref mut leaf) => {
+                        match compare_leafkeys(&leaf.key()[depth..], &key_bytes[depth..]) {
+                            PartialKeyComp::FullMatch(_) => Some(leaf.change_value(value)),
+                            PartialKeyComp::PartialMatch(_) => {
+                                let mut new_inner = ARTInnerNode::new_inner_4(0);
+                                dbg!(key_bytes[depth] as char);
+                                new_inner.add_child(&key_bytes, value, key_bytes[depth]);
+                                let byte: u8 = leaf.key().get(depth).unwrap().to_owned();
 
-                        // dbg!(byte as char);
+                                dbg!(byte as char);
 
-                        new_inner.add_node(node, byte);
-                        current_link.replace(Box::new(ARTNode::Inner(new_inner,
-                                                                    Rc::clone(&key_bytes),
-                                                                    None)));
-                        None
+                                new_inner.add_node(node, byte);
+                                current_link.replace(Box::new(ARTNode::Inner(new_inner,
+                                                                            Rc::clone(&key_bytes),
+                                                                            None)));
+                                None
+                            }
+                        }
                     }
                 }
             }
@@ -113,8 +119,8 @@ impl<'a, K: ARTKey, V> ARTree<K, V> {
                 Some(node) => {
                     match **node {
                         ARTNode::Leaf(ref leaf) => {
-                            if let LeafKeyComp::FullMatch = compare_leafkey(&leaf.key()[depth..],
-                                                                            &key_bytes[depth..]) {
+                            if let PartialKeyComp::FullMatch(_) = compare_leafkeys(&leaf.key()[depth..],
+                                                                             &key_bytes[depth..]) {
                                 break Some(leaf.value());
                             } else {
                                 break None;

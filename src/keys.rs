@@ -53,19 +53,17 @@ pub fn compare_pkeys(pkey_1: &[u8], pkey_2: &[u8]) -> PartialKeyComp {
     }
 }
 
-pub enum LeafKeyComp {
-    FullMatch,
-    IncompleteMatch
-}
-
-pub fn compare_leafkey(key_1: &[u8], key_2: &[u8]) -> LeafKeyComp {
-    if key_1.len() != key_2.len() {
-        return LeafKeyComp::IncompleteMatch;
-    }
-
-    if let PartialKeyComp::FullMatch(_) = compare_pkeys(key_1, key_2) {
-        LeafKeyComp::FullMatch
-    } else {
-        LeafKeyComp::IncompleteMatch
+pub fn compare_leafkeys(pkey_1: &[u8], pkey_2: &[u8]) -> PartialKeyComp {
+    match zip(pkey_1, pkey_2).position(|(a, b)| a != b) {
+        Some(pos) => PartialKeyComp::PartialMatch(pos),
+        None => {
+            let len1 = pkey_1.len();
+            let len2 = pkey_2.len();
+            if len1 != len2 {
+                PartialKeyComp::PartialMatch(std::cmp::min(len1, len2))
+            } else {
+                PartialKeyComp::FullMatch(len1)
+            }
+        }
     }
 }
