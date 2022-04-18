@@ -85,14 +85,18 @@ impl<'a, K: ARTKey, V> ARTree<K, V> {
                     }
                     ARTNode::Leaf(ref mut leaf) => {
                         match compare_leafkeys(&leaf.key()[depth..], &key_bytes[depth..]) {
-                            PartialKeyComp::FullMatch(_) => Some(leaf.change_value(value)),
+                            PartialKeyComp::FullMatch(_) => {
+                                let ret = leaf.change_value(value);
+                                current_link.replace(node);
+                                Some(ret)
+                            }
                             PartialKeyComp::PartialMatch(_) => {
                                 let mut new_inner = ARTInnerNode::new_inner_4(0);
-                                dbg!(key_bytes[depth] as char);
+                                // dbg!(key_bytes[depth] as char);
                                 new_inner.add_child(&key_bytes, value, key_bytes[depth]);
                                 let byte: u8 = leaf.key().get(depth).unwrap().to_owned();
 
-                                dbg!(byte as char);
+                                // dbg!(byte as char);
 
                                 new_inner.add_node(node, byte);
                                 current_link.replace(Box::new(ARTNode::Inner(new_inner,

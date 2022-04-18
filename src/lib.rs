@@ -44,14 +44,21 @@ mod tests {
         art.insert(String::from("Wendell"), 33);
         art.insert(String::from("Rusty"), 44);
         art.insert(String::from("Jerry"), 23);
+        art.insert(String::from("Jenny"), 23);
+        art.insert(String::from("Jenson"), 23);
+        art.insert(String::from("Jen"), 50);
+        art.insert(String::from("Wendell"), 50);
 
         assert_eq!(26, *art.find(String::from("Jason")).unwrap());
         assert_eq!(21, *art.find(String::from("Drake")).unwrap());
         assert_eq!(54, *art.find(String::from("Nathaniel")).unwrap());
         assert_eq!(22, *art.find(String::from("Velma")).unwrap());
         assert_eq!(55, *art.find(String::from("Sabrina")).unwrap());
-        assert_eq!(33, *art.find(String::from("Wendell")).unwrap());
         assert_eq!(44, *art.find(String::from("Rusty")).unwrap());
         assert_eq!(23, *art.find(String::from("Jerry")).unwrap());
+        assert_eq!(23, *art.find(String::from("Jenny")).unwrap());
+        assert_eq!(23, *art.find(String::from("Jenson")).unwrap());
+        assert_eq!(50, *art.find(String::from("Jen")).unwrap());
+        assert_eq!(50, *art.find(String::from("Wendell")).unwrap());
     }
 }
