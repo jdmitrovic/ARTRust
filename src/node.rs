@@ -1,13 +1,21 @@
-use std::{ marker::PhantomData, mem::{ self, MaybeUninit } };
+use std::marker::PhantomData;
 use std::rc::Rc;
+use std::mem::MaybeUninit;
+use std::mem::transmute;
 
 use crunchy::{self, unroll};
+
 use std::arch::x86_64::_mm_set1_epi8;
 use std::arch::x86_64::_mm_cmpeq_epi8;
 use std::arch::x86_64::_mm_movemask_epi8;
 use std::arch::x86_64::_mm_xor_si128;
 use std::arch::x86_64::_mm_bslli_si128;
+use std::arch::x86_64::_mm_bsrli_si128;
+use std::arch::x86_64::_mm_andnot_si128;
 use std::arch::x86_64::_mm_setr_epi8;
+use std::arch::x86_64::_mm_extract_epi16;
+use std::arch::x86_64::_mm_and_si128;
+use std::arch::x86_64::_mm_or_si128;
 
 use crate::ARTKey;
 use crate::keys::*;
@@ -86,6 +94,10 @@ impl<K: ARTKey, V> ARTLeaf<K, V> {
         &self.value
     }
 
+    pub fn take_value(self) -> V {
+        self.value
+    }
+
     pub fn change_value(&mut self, val: V) -> V {
         std::mem::replace(&mut self.value, val)
     }
@@ -101,7 +113,7 @@ macro_rules! initialize_array {
             item.write(None);
         }
 
-        unsafe { mem::transmute::<_, [$t; $l]>(arr) }
+        unsafe { transmute::<_, [$t; $l]>(arr) }
     }};
 }
 
@@ -114,48 +126,6 @@ impl<'a, K: ARTKey, V> ARTInnerNode<K, V> {
             children_num: 0
         }))
     }
-
-
-    // pub fn new_inner_48(pkey_size: u8) -> Box<ARTInnerNode<K, V>> {
-    //     let children = {
-    //         let mut arr: [MaybeUninit<Option<Box<ARTNode<K, V>>>>; 48] = unsafe {
-    //             MaybeUninit::uninit().assume_init()
-    //         };
-
-    //         for item in &mut arr[..] {
-    //             item.write(None);
-    //         }
-
-    //         unsafe { mem::transmute::<_, [Option<Box<ARTNode<K, V>>>; 48]>(arr) }
-    //     };
-
-    //     Box::new(ARTInnerNode::Inner48(ARTInner48 {
-    //         keys: Default::default(),
-    //         children,
-    //         children_num: 0,
-    //         pkey_size,
-    //     }))
-    // }
-
-    // pub fn new_inner_256(pkey_size: u8) -> Box<ARTInnerNode<K, V>> {
-    //     let children = {
-    //         let mut arr: [MaybeUninit<Option<Box<ARTNode<K, V>>>>; 256] = unsafe {
-    //             MaybeUninit::uninit().assume_init()
-    //         };
-
-    //         for item in &mut arr[..] {
-    //             item.write(None);
-    //         }
-
-    //         unsafe { mem::transmute::<_, [Option<Box<ARTNode<K, V>>>; 256]>(arr) }
-    //     };
-
-    //     Box::new(ARTInnerNode::Inner256(ARTInner256 {
-    //         children,
-    //         children_num: 0,
-    //         pkey_size,
-    //     }))
-    // }
 
     pub fn partial_key_size(&self) -> u8 {
         match self {
@@ -233,6 +203,8 @@ impl<'a, K: ARTKey, V> ARTInnerNode<K, V> {
                 if bitfield > 0 {
                     let index = node.children_num as usize - bitfield.trailing_zeros() as usize - 1;
                     Some(&mut node.children[index] as *mut ARTLink<K, V>)
+
+
                 } else {
                     None
                 }
@@ -243,6 +215,70 @@ impl<'a, K: ARTKey, V> ARTInnerNode<K, V> {
             }
             ARTInnerNode::Inner256(node) => Some(&mut node.children[key_byte as usize] as *mut ARTLink<K, V>),
         }
+    }
+
+    pub fn remove_child(&mut self, key_byte: u8) -> Option<V> {
+        let child = match self {
+            ARTInnerNode::Inner4(node) => {
+                let pos = node.keys.iter().position(|k| {
+                    match k {
+                        None => false,
+                        Some(x) => *x == key_byte,
+                    }
+                });
+
+                pos.map(move |i| {
+                    node.keys[i].take();
+                    node.children[i].take()
+                }).flatten()
+            }
+            ARTInnerNode::Inner16(node) => {
+                let key = unsafe { _mm_set1_epi8(key_byte as i8) };
+                let cmp = unsafe { _mm_cmpeq_epi8(key, node.keys) };
+                let mask = (1 << node.children_num) - 1;
+                let bitfield = unsafe { _mm_movemask_epi8(cmp) & mask };
+
+                if bitfield > 0 {
+                    let btz = bitfield.trailing_zeros() as usize;
+                    let index = node.children_num as usize - btz - 1;
+
+                    if btz != 0 {
+                        unsafe {
+                            //removing the key
+                            let new_keys = _mm_andnot_si128(cmp, node.keys);
+                            let replacement_key  = _mm_extract_epi16::<0>(node.keys).to_ne_bytes()[0];
+                            let new_mask = _mm_set1_epi8(replacement_key as i8);
+                            let new_mask = _mm_and_si128(new_mask, cmp);
+                            node.keys = _mm_or_si128(new_keys, new_mask);
+                        }
+
+                        node.children.as_mut().swap(index, node.children_num as usize - 1);
+                    }
+
+                    node.keys = unsafe { _mm_bsrli_si128::<1>(node.keys) };
+                    node.children_num -= 1;
+                    node.children[node.children_num as usize].take()
+                } else {
+                    None
+                }
+            }
+            ARTInnerNode::Inner48(node) => {
+                let index = node.keys[key_byte as usize].take();
+                index.map(|i| node.children[i as usize].take()).flatten()
+            }
+            ARTInnerNode::Inner256(node) => node.children[key_byte as usize].take(),
+        };
+
+        if let Some(box ARTNode::Leaf(leaf)) = child {
+            Some(leaf.take_value())
+        } else {
+            None
+        }
+    }
+
+    pub fn shrink(self) -> Box<ARTInnerNode<K, V>> {
+
+        unimplemented!();
     }
 
     pub fn find_child(&self, key_byte: u8) -> Option<&Box<ARTNode<K, V>>> {
@@ -286,6 +322,15 @@ impl<'a, K: ARTKey, V> ARTInnerNode<K, V> {
             ARTInnerNode::Inner256(_) => false,
         }
     }
+
+    pub fn remove_one_child(&mut self) {
+        match self {
+            ARTInnerNode::Inner4(ref mut node)  => node.children_num -= 1,
+            ARTInnerNode::Inner16(ref mut node) => node.children_num -= 1,
+            ARTInnerNode::Inner48(ref mut node) => node.children_num -= 1,
+            ARTInnerNode::Inner256(ref mut node) => node.children_num -= 1,
+        }
+    }
     
     pub fn grow(self) -> Box<ARTInnerNode<K, V>> {
         Box::new(
@@ -321,7 +366,7 @@ impl<'a, K: ARTKey, V> ARTInnerNode<K, V> {
                     let mut keys: [Option<u8>; 256] = initialize_array!(256, Option<u8>);
 
                     let bytes = unsafe {
-                        mem::transmute::<__m128i, [u8; 16]>(inner_node.keys)
+                        transmute::<__m128i, [u8; 16]>(inner_node.keys)
                     };
 
                     unroll! {

@@ -111,6 +111,80 @@ impl<'a, K: ARTKey, V> ARTree<K, V> {
         }
     }
 
+    pub fn delete(&mut self, key: K) -> Option<V> {
+        let key_bytes: ByteKey = Rc::new(key.convert_to_bytes());
+        let key_len = key_bytes.len();
+        let mut current_link = &mut self.root;
+        let mut depth: usize = 0;
+
+        while let Some(box ARTNode::Inner(ref mut inner, ref pkey, ref mut val)) = current_link {
+            let pk_size = inner.partial_key_size();
+            let current_pkey = &key_bytes.get(depth..depth + pk_size as usize)
+                                         .unwrap_or(&key_bytes[depth..]);
+
+            match compare_pkeys(pkey, current_pkey) {
+                PartialKeyComp::FullMatch(len) => {
+                    depth += len;
+                    if depth == key_len {
+                        // key match in inner node
+                        break;
+                    }
+                    match inner.find_child_mut(key_bytes[depth]) {
+                        None => return None,
+                        Some(link) => {
+                            let new_link = unsafe { &mut *link };
+
+                            if let Some(box ARTNode::Leaf(ref leaf)) = new_link {
+                                match compare_leafkeys(&leaf.key()[depth..], &key_bytes[depth..]) {
+                                    PartialKeyComp::FullMatch(_) => break,
+                                    PartialKeyComp::PartialMatch(_) => return None,
+                                }
+                            } else {
+                                current_link = new_link;
+                                depth += 1;
+                            }
+                        }
+                    }
+
+                }
+                PartialKeyComp::PartialMatch(_) => {
+                    return None;
+                }
+            }
+        }
+
+        match current_link.take() {
+            None => return None,
+            Some(node) => {
+                match *node {
+                    ARTNode::Inner(mut inner, pkey, val) => {
+                        if depth == key_len {
+                            // shrink needed
+                            current_link.replace(Box::new(ARTNode::Inner(inner, pkey, None)));
+                            return val;
+                        }
+
+                        let former_val = inner.as_mut().remove_child(key_bytes[depth]);
+                        current_link.replace(Box::new(ARTNode::Inner(inner, pkey, val)));
+                        former_val
+                    }
+                    ARTNode::Leaf(leaf) => {
+                        // only if tree consists only of one leaf node
+                        match compare_leafkeys(&leaf.key()[depth..], &key_bytes[depth..]) {
+                            PartialKeyComp::FullMatch(_) => {
+                                return Some(leaf.take_value());
+                            }
+                            PartialKeyComp::PartialMatch(_) => {
+                                current_link.replace(Box::new(ARTNode::Leaf(leaf)));
+                                return None;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     pub fn find(&self, key: K) -> Option<&V> {
         let key_bytes = key.convert_to_bytes();
         let key_len = key_bytes.len();
