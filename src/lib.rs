@@ -7,13 +7,13 @@ pub mod keys;
 use node::ARTLink;
 use std::marker::PhantomData;
 
-pub trait ARTKey {
-    fn convert_to_bytes(self) -> Vec<u8>;
+pub struct ARTree<K: ARTKey, V> {
+    root: ARTLink<V>,
+    _marker: PhantomData<K>,
 }
 
-pub struct ARTree<K: ARTKey, V> {
-    root: ARTLink<K, V>,
-    _marker: PhantomData<K>,
+pub trait ARTKey {
+    fn convert_to_bytes(self) -> Vec<u8>;
 }
 
 #[cfg(test)]
@@ -64,10 +64,12 @@ mod tests {
         art.delete(String::from("Jenny"));
         art.delete(String::from("Jason"));
         art.delete(String::from("Jen"));
+        art.delete(String::from("Caleb"));
 
         assert_eq!(None, art.find(String::from("Jenny")));
         assert_eq!(None, art.find(String::from("Jason")));
         assert_eq!(None, art.find(String::from("Jen")));
+        assert_eq!(None, art.find(String::from("Caleb")));
 
         assert_eq!(21, *art.find(String::from("Drake")).unwrap());
         assert_eq!(54, *art.find(String::from("Nathaniel")).unwrap());

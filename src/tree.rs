@@ -1,6 +1,5 @@
 use crate::{ ARTree, ARTKey };
-use crate::node::{ ARTLink, ARTNode, ARTLeaf, ARTInnerNode };
-use std::marker::PhantomData;
+use crate::node::{ ARTNode, ARTLeaf, ARTInnerNode };
 use std::rc::Rc;
 use crate::keys::*;
 
@@ -8,7 +7,7 @@ impl<'a, K: ARTKey, V> ARTree<K, V> {
     pub fn new() -> Self {
         ARTree {
             root: None,
-            _marker: PhantomData,
+            _marker: Default::default(),
         }
     }
 
