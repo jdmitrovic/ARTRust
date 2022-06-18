@@ -1,6 +1,9 @@
-use crate::ARTKey;
 use std::rc::Rc;
 use std::iter::zip;
+
+pub trait ARTKey {
+    fn convert_to_bytes(self) -> Vec<u8>;
+}
 
 impl ARTKey for String {
     fn convert_to_bytes(self) -> Vec<u8> {
@@ -36,12 +39,31 @@ pub enum PartialKeyComp {
     FullMatch(usize),
 }
 
-// pub fn compare_pkeys(pkey_1: &[u8], pkey_2: &[u8]) -> PartialKeyComp {
-//     match zip(pkey_1, pkey_2).position(|(a, b)| a != b) {
-//         None => PartialKeyComp::FullMatch(std::cmp::min(pkey_1.len(), pkey_2.len())),
-//         Some(pos) => PartialKeyComp::PartialMatch(pos),
-//     }
-// }
+pub enum LeafKeyComp {
+    PartialMatch(usize),
+    FullMatch,
+    CompleteMatchLeft(usize),
+    CompleteMatchRight(usize),
+}
+
+pub fn compare_leaf_keys(key_1: &[u8], key_2: &[u8]) -> LeafKeyComp {
+    let len_1 = key_1.len();
+    let len_2 = key_2.len();
+
+    match zip(key_1, key_2).position(|(a, b)| a != b) {
+        None => {
+
+            if len_1 == len_2 {
+                return LeafKeyComp::FullMatch;
+            } else if len_1 < len_2 {
+                return LeafKeyComp::CompleteMatchLeft(len_1);
+            } else {
+                return LeafKeyComp::CompleteMatchRight(len_2);
+            }
+        }
+        Some(pos) => LeafKeyComp::PartialMatch(pos),
+    }
+}
 
 
 pub fn compare_pkeys(pkey_1: &[u8], pkey_2: &[u8]) -> PartialKeyComp {
@@ -53,15 +75,15 @@ pub fn compare_pkeys(pkey_1: &[u8], pkey_2: &[u8]) -> PartialKeyComp {
     }
 }
 
-pub fn compare_leafkeys(pkey_1: &[u8], pkey_2: &[u8]) -> PartialKeyComp {
-    let len1 = pkey_1.len();
-    let len2 = pkey_2.len();
-    if len1 != len2 {
-        return PartialKeyComp::PartialMatch(std::cmp::min(len1, len2));
-    }
+// pub fn compare_leaf_keys(pkey_1: &[u8], pkey_2: &[u8]) -> PartialKeyComp {
+//     let len1 = pkey_1.len();
+//     let len2 = pkey_2.len();
+//     if len1 != len2 {
+//         return PartialKeyComp::PartialMatch(std::cmp::min(len1, len2));
+//     }
 
-    match zip(pkey_1, pkey_2).position(|(a, b)| a != b) {
-        Some(pos) => PartialKeyComp::PartialMatch(pos),
-        None => PartialKeyComp::FullMatch(len1),
-    }
-}
+//     match zip(pkey_1, pkey_2).position(|(a, b)| a != b) {
+//         Some(pos) => PartialKeyComp::PartialMatch(pos),
+//         None => PartialKeyComp::FullMatch(len1),
+//     }
+// }

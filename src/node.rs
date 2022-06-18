@@ -2,7 +2,7 @@ use std::rc::Rc;
 use std::mem::MaybeUninit;
 use std::mem::transmute;
 
-use crunchy::{self, unroll};
+use crunchy::{ self, unroll };
 
 use std::arch::x86_64::_mm_set1_epi8;
 use std::arch::x86_64::_mm_cmpeq_epi8;
@@ -16,7 +16,7 @@ use std::arch::x86_64::_mm_extract_epi16;
 use std::arch::x86_64::_mm_and_si128;
 use std::arch::x86_64::_mm_or_si128;
 
-use crate::keys::*;
+use crate::keys::ByteKey;
 
 pub enum ARTNode<V> {
     Inner(Box<ARTInnerNode<V>>, ByteKey, Option<V>),
@@ -112,7 +112,7 @@ macro_rules! initialize_array {
     }};
 }
 
-impl<'a, V> ARTInnerNode<V> {
+impl<V> ARTInnerNode<V> {
     pub fn new_inner_4(pkey_size: u8) -> Box<ARTInnerNode<V>> {
         Box::new(ARTInnerNode::Inner4(ARTInner4 {
             keys: Default::default(),
@@ -208,7 +208,9 @@ impl<'a, V> ARTInnerNode<V> {
                 let index = node.keys[key_byte as usize];
                 index.map(|i| &mut node.children[i as usize] as *mut ARTLink<V>)
             }
-            ARTInnerNode::Inner256(node) => Some(&mut node.children[key_byte as usize] as *mut ARTLink<V>),
+            ARTInnerNode::Inner256(node) => {
+                Some(&mut node.children[key_byte as usize] as *mut ARTLink<V>)
+            }
         }
     }
 

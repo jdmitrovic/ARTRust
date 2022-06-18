@@ -1,7 +1,8 @@
-use crate::{ ARTree, ARTKey };
+use crate::ARTree;
 use crate::node::{ ARTNode, ARTLeaf, ARTInnerNode };
+use crate::keys::{ PartialKeyComp, ByteKey, ARTKey, compare_pkeys,
+                   compare_leaf_keys, LeafKeyComp };
 use std::rc::Rc;
-use crate::keys::*;
 
 impl<'a, K: ARTKey, V> ARTree<K, V> {
     pub fn new() -> Self {
@@ -11,8 +12,7 @@ impl<'a, K: ARTKey, V> ARTree<K, V> {
         }
     }
 
-
-    pub fn insert(&mut self, key: K, value: V) -> Option<V> {
+    pub fn insert_or_update(&mut self, key: K, value: V) -> Option<V> {
         let key_bytes: ByteKey = Rc::new(key.convert_to_bytes());
         let key_len = key_bytes.len();
         let mut current_link = &mut self.root;
@@ -57,7 +57,7 @@ impl<'a, K: ARTKey, V> ARTree<K, V> {
                 current_link.replace(Box::new(ARTNode::Leaf(ARTLeaf::new(&key_bytes, value))));
                 None
             }
-            Some(mut node) => {
+            Some(node) => {
                 if partial_match {
                     let mut new_inner = ARTInnerNode::new_inner_4(pkey_len as u8);
                     new_inner.add_child(&key_bytes, value, key_bytes[depth]);
@@ -82,25 +82,47 @@ impl<'a, K: ARTKey, V> ARTree<K, V> {
                                                                      val)));
                         None
                     }
-                    ARTNode::Leaf(ref mut leaf) => {
-                        match compare_leafkeys(&leaf.key()[depth..], &key_bytes[depth..]) {
-                            PartialKeyComp::FullMatch(_) => {
+                    ARTNode::Leaf(mut leaf) => {
+                        match compare_leaf_keys(&leaf.key()[depth..], &key_bytes[depth..]) {
+                            LeafKeyComp::FullMatch => {
                                 let ret = leaf.change_value(value);
-                                current_link.replace(node);
+                                current_link.replace(Box::new(ARTNode::Leaf(leaf)));
                                 Some(ret)
                             }
-                            PartialKeyComp::PartialMatch(_) => {
-                                let mut new_inner = ARTInnerNode::new_inner_4(0);
+                            LeafKeyComp::PartialMatch(len) => {
+                                depth += len;
+                                let mut new_inner = ARTInnerNode::new_inner_4(len as u8);
                                 // dbg!(key_bytes[depth] as char);
                                 new_inner.add_child(&key_bytes, value, key_bytes[depth]);
                                 let byte: u8 = leaf.key().get(depth).unwrap().to_owned();
 
                                 // dbg!(byte as char);
 
-                                new_inner.add_node(node, byte);
+                                new_inner.add_node(Box::new(ARTNode::Leaf(leaf)), byte);
                                 current_link.replace(Box::new(ARTNode::Inner(new_inner,
                                                                             Rc::clone(&key_bytes),
                                                                             None)));
+                                None
+                            }
+                            LeafKeyComp::CompleteMatchLeft(len) => {
+                                depth += len;
+                                let mut new_inner = ARTInnerNode::new_inner_4(len as u8);
+                                new_inner.add_child(&key_bytes, value, key_bytes[depth]);
+
+                                current_link.replace(Box::new(ARTNode::Inner(new_inner,
+                                                                            Rc::clone(&key_bytes),
+                                                                            Some(leaf.take_value()))));
+                                None
+                            }
+                            LeafKeyComp::CompleteMatchRight(len) => {
+                                depth += len;
+                                let mut new_inner = ARTInnerNode::new_inner_4(len as u8);
+                                let byte: u8 = leaf.key().get(depth).unwrap().to_owned();
+
+                                new_inner.add_node(Box::new(ARTNode::Leaf(leaf)), byte);
+                                current_link.replace(Box::new(ARTNode::Inner(new_inner,
+                                                                            Rc::clone(&key_bytes),
+                                                                            Some(value))));
                                 None
                             }
                         }
@@ -116,7 +138,7 @@ impl<'a, K: ARTKey, V> ARTree<K, V> {
         let mut current_link = &mut self.root;
         let mut depth: usize = 0;
 
-        while let Some(box ARTNode::Inner(ref mut inner, ref pkey, ref mut val)) = current_link {
+        while let Some(box ARTNode::Inner(ref mut inner, ref pkey, _)) = current_link {
             let pk_size = inner.partial_key_size();
             let current_pkey = &key_bytes.get(depth..depth + pk_size as usize)
                                          .unwrap_or(&key_bytes[depth..]);
@@ -134,9 +156,11 @@ impl<'a, K: ARTKey, V> ARTree<K, V> {
                             let new_link = unsafe { &mut *link };
 
                             if let Some(box ARTNode::Leaf(ref leaf)) = new_link {
-                                match compare_leafkeys(&leaf.key()[depth..], &key_bytes[depth..]) {
-                                    PartialKeyComp::FullMatch(_) => break,
-                                    PartialKeyComp::PartialMatch(_) => return None,
+                                if let LeafKeyComp::FullMatch = compare_leaf_keys(&leaf.key()[depth..],
+                                                                                  &key_bytes[depth..]) {
+                                    break;
+                                } else {
+                                    return None;
                                 }
                             } else {
                                 current_link = new_link;
@@ -158,7 +182,7 @@ impl<'a, K: ARTKey, V> ARTree<K, V> {
                 match *node {
                     ARTNode::Inner(mut inner, pkey, val) => {
                         if depth == key_len {
-                            // shrink needed
+                            // shrink needed?
                             current_link.replace(Box::new(ARTNode::Inner(inner, pkey, None)));
                             return val;
                         }
@@ -169,14 +193,12 @@ impl<'a, K: ARTKey, V> ARTree<K, V> {
                     }
                     ARTNode::Leaf(leaf) => {
                         // only if tree consists only of one leaf node
-                        match compare_leafkeys(&leaf.key()[depth..], &key_bytes[depth..]) {
-                            PartialKeyComp::FullMatch(_) => {
-                                return Some(leaf.take_value());
-                            }
-                            PartialKeyComp::PartialMatch(_) => {
-                                current_link.replace(Box::new(ARTNode::Leaf(leaf)));
-                                return None;
-                            }
+                        if let LeafKeyComp::FullMatch = compare_leaf_keys(&leaf.key()[depth..],
+                                                                          &key_bytes[depth..]) {
+                            return Some(leaf.take_value());
+                        } else {
+                            current_link.replace(Box::new(ARTNode::Leaf(leaf)));
+                            return None;
                         }
                     }
                 }
@@ -196,8 +218,8 @@ impl<'a, K: ARTKey, V> ARTree<K, V> {
                 Some(node) => {
                     match **node {
                         ARTNode::Leaf(ref leaf) => {
-                            if let PartialKeyComp::FullMatch(_) = compare_leafkeys(&leaf.key()[depth..],
-                                                                             &key_bytes[depth..]) {
+                            if let LeafKeyComp::FullMatch = compare_leaf_keys(&leaf.key()[depth..],
+                                                                              &key_bytes[depth..]) {
                                 break Some(leaf.value());
                             } else {
                                 break None;
