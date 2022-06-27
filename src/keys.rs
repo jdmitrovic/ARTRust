@@ -47,11 +47,10 @@ pub enum LeafKeyComp {
 }
 
 pub fn compare_leaf_keys(key_1: &[u8], key_2: &[u8]) -> LeafKeyComp {
-    let len_1 = key_1.len();
-    let len_2 = key_2.len();
-
     match zip(key_1, key_2).position(|(a, b)| a != b) {
         None => {
+            let len_1 = key_1.len();
+            let len_2 = key_2.len();
 
             if len_1 == len_2 {
                 return LeafKeyComp::FullMatch;

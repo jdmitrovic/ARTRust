@@ -71,7 +71,7 @@ impl<'a, K: ARTKey, V> ARTree<K, V> {
                 match *node {
                     ARTNode::Inner(inner, pkey, val) => {
                         let mut inner = if inner.is_full() {
-                            inner.grow()
+                            Box::new(inner.grow())
                         } else {
                             inner
                         };
@@ -92,11 +92,8 @@ impl<'a, K: ARTKey, V> ARTree<K, V> {
                             LeafKeyComp::PartialMatch(len) => {
                                 depth += len;
                                 let mut new_inner = ARTInnerNode::new_inner_4(len as u8);
-                                // dbg!(key_bytes[depth] as char);
                                 new_inner.add_child(&key_bytes, value, key_bytes[depth]);
                                 let byte: u8 = leaf.key().get(depth).unwrap().to_owned();
-
-                                // dbg!(byte as char);
 
                                 new_inner.add_node(Box::new(ARTNode::Leaf(leaf)), byte);
                                 current_link.replace(Box::new(ARTNode::Inner(new_inner,
@@ -177,13 +174,15 @@ impl<'a, K: ARTKey, V> ARTree<K, V> {
         }
 
         match current_link.take() {
-            None => return None,
+            None => None,
             Some(node) => {
                 match *node {
                     ARTNode::Inner(mut inner, pkey, val) => {
                         if depth == key_len {
                             // shrink needed?
-                            current_link.replace(Box::new(ARTNode::Inner(inner, pkey, None)));
+                            current_link.replace(Box::new(ARTNode::Inner(inner,
+                                                                         pkey,
+                                                                         None)));
                             return val;
                         }
 
