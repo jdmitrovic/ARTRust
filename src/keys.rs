@@ -52,12 +52,25 @@ pub fn compare_leaf_keys(key_1: &[u8], key_2: &[u8]) -> LeafKeyComp {
             let len_1 = key_1.len();
             let len_2 = key_2.len();
 
-            if len_1 == len_2 {
-                return LeafKeyComp::FullMatch;
-            } else if len_1 < len_2 {
-                return LeafKeyComp::CompleteMatchLeft(len_1);
-            } else {
-                return LeafKeyComp::CompleteMatchRight(len_2);
+            // if len_1 == len_2 {
+            //     return leafkeycomp::fullmatch;
+            // } else if len_1 < len_2 {
+            //     return leafkeycomp::completematchleft(len_1);
+            // } else {
+            //     return leafkeycomp::completematchright(len_2);
+            // }
+            use std::cmp::Ordering;
+
+            match len_1.cmp(&len_2) {
+                Ordering::Equal => {
+                    LeafKeyComp::FullMatch
+                }
+                Ordering::Less => {
+                    LeafKeyComp::CompleteMatchLeft(len_1)
+                }
+                Ordering::Greater => {
+                    LeafKeyComp::CompleteMatchRight(len_2)
+                }
             }
         }
         Some(pos) => LeafKeyComp::PartialMatch(pos),

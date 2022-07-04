@@ -71,7 +71,7 @@ impl<'a, K: ARTKey, V> ARTree<K, V> {
                 match *node {
                     ARTNode::Inner(inner, pkey, val) => {
                         let mut inner = if inner.is_full() {
-                            Box::new(inner.grow())
+                            inner.grow()
                         } else {
                             inner
                         };
@@ -186,18 +186,25 @@ impl<'a, K: ARTKey, V> ARTree<K, V> {
                             return val;
                         }
 
-                        let former_val = inner.as_mut().remove_child(key_bytes[depth]);
-                        current_link.replace(Box::new(ARTNode::Inner(inner, pkey, val)));
+                        let former_val = inner.remove_child(key_bytes[depth]);
+
+                        let new_inner = if inner.is_shrinkable() {
+                            inner.shrink()
+                        } else {
+                            inner
+                        };
+
+                        current_link.replace(Box::new(ARTNode::Inner(new_inner, pkey, val)));
                         former_val
                     }
                     ARTNode::Leaf(leaf) => {
                         // only if tree consists only of one leaf node
                         if let LeafKeyComp::FullMatch = compare_leaf_keys(&leaf.key()[depth..],
                                                                           &key_bytes[depth..]) {
-                            return Some(leaf.take_value());
+                            Some(leaf.take_value())
                         } else {
                             current_link.replace(Box::new(ARTNode::Leaf(leaf)));
-                            return None;
+                            None
                         }
                     }
                 }
@@ -230,7 +237,7 @@ impl<'a, K: ARTKey, V> ARTree<K, V> {
                             match key_bytes.get(depth..depth + pkey_size as usize) {
                                 None => break None,
                                 Some(pkey_2) => {
-                                    match compare_pkeys(&pkey, pkey_2) {
+                                    match compare_pkeys(pkey, pkey_2) {
                                         PartialKeyComp::PartialMatch(_) => break None,
                                         PartialKeyComp::FullMatch(len) => {
                                             depth += len;

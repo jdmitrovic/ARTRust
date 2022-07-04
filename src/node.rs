@@ -1,5 +1,4 @@
 use std::rc::Rc;
-use std::mem::MaybeUninit;
 use std::mem::transmute;
 
 use crunchy::{ self, unroll };
@@ -17,19 +16,20 @@ use std::arch::x86_64::_mm_and_si128;
 use std::arch::x86_64::_mm_or_si128;
 
 use crate::keys::ByteKey;
+use crate::initialize_array;
 
 pub enum ARTNode<V> {
-    Inner(Box<ARTInnerNode<V>>, ByteKey, Option<V>),
+    Inner(ARTInnerNode<V>, ByteKey, Option<V>),
     Leaf(ARTLeaf<V>),
 }
 
 pub type ARTLink<V> = Option<Box<ARTNode<V>>>;
 
 pub enum ARTInnerNode<V> {
-    Inner4(ARTInner4<V>),
-    Inner16(ARTInner16<V>),
-    Inner48(ARTInner48<V>),
-    Inner256(ARTInner256<V>),
+    Inner4(Box<ARTInner4<V>>),
+    Inner16(Box<ARTInner16<V>>),
+    Inner48(Box<ARTInner48<V>>),
+    Inner256(Box<ARTInner256<V>>),
 }
 
 pub struct ARTInner4<V> {
@@ -98,23 +98,11 @@ impl<V> ARTLeaf<V> {
     }
 }
 
-macro_rules! initialize_array {
-    ($l: tt, $t: ty) => {{
-        let mut arr: [MaybeUninit<$t>; $l] = unsafe {
-            MaybeUninit::uninit().assume_init()
-        };
-
-        for item in &mut arr[..] {
-            item.write(None);
-        }
-
-        unsafe { transmute::<_, [$t; $l]>(arr) }
-    }};
-}
 
 impl<V> ARTInnerNode<V> {
-    pub fn new_inner_4(pkey_size: u8) -> Box<ARTInnerNode<V>> {
-        Box::new(ARTInnerNode::Inner4(ARTInner4 {
+    #[inline]
+    pub fn new_inner_4(pkey_size: u8) -> ARTInnerNode<V> {
+        ARTInnerNode::Inner4(Box::new(ARTInner4 {
             keys: Default::default(),
             children: Default::default(),
             pkey_size,
@@ -122,6 +110,7 @@ impl<V> ARTInnerNode<V> {
         }))
     }
 
+    #[inline]
     pub fn partial_key_size(&self) -> u8 {
         match self {
             ARTInnerNode::Inner4(node) => node.pkey_size,
@@ -131,6 +120,7 @@ impl<V> ARTInnerNode<V> {
         }
     }
 
+    #[inline]
     pub fn reduce_pkey_size(&mut self, r: u8) {
         match self {
             ARTInnerNode::Inner4(node) => node.pkey_size -= r,
@@ -140,12 +130,14 @@ impl<V> ARTInnerNode<V> {
         }
     }
 
+    #[inline]
     pub fn add_child(&mut self, byte_key: &ByteKey, value: V, key_byte: u8) {
         self.add_node(Box::new(ARTNode::Leaf(ARTLeaf::new(byte_key, value))), key_byte)
     }
 
+    #[inline]
     pub fn add_node(&mut self, new_node: Box<ARTNode<V>>, key_byte: u8) {
-        assert!(self.is_full() == false);
+        assert!(!self.is_full());
 
         match self {
             ARTInnerNode::Inner4(node) => {
@@ -171,12 +163,13 @@ impl<V> ARTInnerNode<V> {
                 node.children_num += 1;
             }
             ARTInnerNode::Inner256(node) => {
-                node.children[key_byte as usize].replace(new_node).unwrap();
+                node.children[key_byte as usize].replace(new_node);
                 node.children_num += 1;
             }
         }
     }
 
+    #[inline]
     pub fn find_child_mut(&mut self, key_byte: u8) -> Option<*mut ARTLink<V>> {
         match self {
             ARTInnerNode::Inner4(node) => {
@@ -224,10 +217,10 @@ impl<V> ARTInnerNode<V> {
                     }
                 });
 
-                pos.map(move |i| {
+                pos.and_then(move |i| {
                     node.keys[i].take();
                     node.children[i].take()
-                }).flatten()
+                })
             }
             ARTInnerNode::Inner16(node) => {
                 let key = unsafe { _mm_set1_epi8(key_byte as i8) };
@@ -261,7 +254,7 @@ impl<V> ARTInnerNode<V> {
             }
             ARTInnerNode::Inner48(node) => {
                 let index = node.keys[key_byte as usize].take();
-                index.map(|i| node.children[i as usize].take()).flatten()
+                index.and_then(|i| node.children[i as usize].take())
             }
             ARTInnerNode::Inner256(node) => node.children[key_byte as usize].take(),
         };
@@ -286,20 +279,18 @@ impl<V> ARTInnerNode<V> {
                     transmute::<__m128i, [u8; 16]>(inner_node.keys)
                 };
 
-                unroll! {
-                    for i in 0..4 {
-                        children[i] = inner_node.children[i].take();
-                        let byte = bytes[15 - i];
-                        keys[byte as usize] = Some(i as u8);
-                    }
+                for i in 0..4 {
+                    children[i] = inner_node.children[i].take();
+                    let byte = bytes[15 - i];
+                    keys[byte as usize] = Some(i as u8);
                 }
 
-                ARTInnerNode::Inner4(ARTInner4 {
+                ARTInnerNode::Inner4(Box::new(ARTInner4 {
                     children,
                     keys,
                     pkey_size: inner_node.pkey_size,
                     children_num: inner_node.children_num,
-                })
+                }))
             }
             ARTInnerNode::Inner48(mut inner_node) => {
                 assert!(inner_node.children_num == 16);
@@ -336,12 +327,12 @@ impl<V> ARTInnerNode<V> {
                                   inner_node.keys[0].unwrap() as i8)
                 };
 
-                ARTInnerNode::Inner16(ARTInner16 {
+                ARTInnerNode::Inner16(Box::new(ARTInner16 {
                     pkey_size: inner_node.pkey_size,
                     keys,
                     children,
                     children_num,
-                })
+                }))
             }
             ARTInnerNode::Inner256(mut inner_node) => {
                 assert!(inner_node.children_num == 48);
@@ -350,19 +341,25 @@ impl<V> ARTInnerNode<V> {
                 let mut keys: [Option<u8>; 256] = initialize_array!(256, Option<u8>);
                 let mut children_num = inner_node.children_num;
 
-                for i in 0..inner_node.children.len() {
-                    if let Some(child) = inner_node.children[i].take() {
-                        children[children_num as usize].replace(child);
-                        keys[i] = Some(children_num);
-                        children_num += 1;
-                    }
+                for (i, child) in inner_node.children.iter_mut().enumerate() {
+                    children[children_num as usize] = child.take();
+                    keys[i] = Some(children_num);
+                    children_num += 1;
                 }
-                ARTInnerNode::Inner48(ARTInner48 {
+
+                // for i in 0..inner_node.children.len() {
+                //     if let Some(child) = inner_node.children[i].take() {
+                //         children[children_num as usize].replace(child);
+                //         keys[i] = Some(children_num);
+                //         children_num += 1;
+                //     }
+                // }
+                ARTInnerNode::Inner48(Box::new(ARTInner48 {
                     pkey_size: inner_node.pkey_size,
                     keys,
                     children,
                     children_num,
-                })
+                }))
             }
         }
     }
@@ -377,7 +374,7 @@ impl<V> ARTInnerNode<V> {
                     }
                 });
 
-                pos.map(move |i| node.children[i].as_ref()).flatten()
+                pos.and_then(move |i| node.children[i].as_ref())
             }
             ARTInnerNode::Inner16(node) => {
                 let key = unsafe { _mm_set1_epi8(key_byte as i8) };
@@ -394,7 +391,7 @@ impl<V> ARTInnerNode<V> {
             }
             ARTInnerNode::Inner48(node) => {
                 let index = node.keys[key_byte as usize];
-                index.map(|i| node.children[i as usize].as_ref()).flatten()
+                index.and_then(|i| node.children[i as usize].as_ref())
             }
             ARTInnerNode::Inner256(node) => node.children[key_byte as usize].as_ref(),
         }
@@ -406,6 +403,15 @@ impl<V> ARTInnerNode<V> {
             ARTInnerNode::Inner16(ref node) => node.children_num >= 16,
             ARTInnerNode::Inner48(ref node) => node.children_num >= 48,
             ARTInnerNode::Inner256(_) => false,
+        }
+    }
+
+    pub fn is_shrinkable(&self) -> bool {
+        match self {
+            ARTInnerNode::Inner4(_)  => false,
+            ARTInnerNode::Inner16(ref node) => node.children_num <= 4,
+            ARTInnerNode::Inner48(ref node) => node.children_num <= 16,
+            ARTInnerNode::Inner256(ref node) => node.children_num <= 48,
         }
     }
 
@@ -437,12 +443,12 @@ impl<V> ARTInnerNode<V> {
                                     0,0,0,0,0,0,0,0,0,0,0,0)
                 };
 
-                ARTInnerNode::Inner16(ARTInner16 {
+                ARTInnerNode::Inner16(Box::new(ARTInner16 {
                     children_num: inner_node.children_num,
                     pkey_size: inner_node.pkey_size,
                     keys,
                     children
-                })
+                }))
             }
             ARTInnerNode::Inner16(mut inner_node) => {
                 assert!(inner_node.children_num == 16);
@@ -454,35 +460,46 @@ impl<V> ARTInnerNode<V> {
                     transmute::<__m128i, [u8; 16]>(inner_node.keys)
                 };
 
-                unroll! {
-                    for i in 0..16 {
-                        children[i] = inner_node.children[i].take();
-                        let byte = bytes[15 - i];
-                        keys[byte as usize] = Some(i as u8);
-                    }
+                // for (i, (child, byte)) in inner_node.children.iter_mut()
+                //                                              .zip(bytes.iter().rev())
+                //                                              .enumerate() {
+                //     children[*byte as usize] = child.take();
+
+                // }
+
+                for i in 0..16 {
+                    children[i] = inner_node.children[i].take();
+                    let byte = bytes[15 - i];
+                    keys[byte as usize] = Some(i as u8);
                 }
 
-                ARTInnerNode::Inner48(ARTInner48 {
+                ARTInnerNode::Inner48(Box::new(ARTInner48 {
                     children,
                     keys,
                     pkey_size: inner_node.pkey_size,
                     children_num: inner_node.children_num,
-                })
+                }))
             }
             ARTInnerNode::Inner48(mut inner_node) => {
                 assert!(inner_node.children_num == 48);
                 let mut children = initialize_array!(256, ARTLink<V>);
 
-                for i in 0..inner_node.keys.len() {
-                    if let Some(old_index) = inner_node.keys[i] {
-                        children[i] = inner_node.children[old_index as usize].take();
+                for (idx, child) in inner_node.keys.iter_mut().zip(&mut children) {
+                    if let Some(i) = idx {
+                        *child = inner_node.children[*i as usize].take();
                     }
                 }
-                ARTInnerNode::Inner256(ARTInner256 {
+
+                // for i in 0..inner_node.keys.len() {
+                //     if let Some(old_index) = inner_node.keys[i] {
+                //         children[i] = inner_node.children[old_index as usize].take();
+                //     }
+                // }
+                ARTInnerNode::Inner256(Box::new(ARTInner256 {
                     pkey_size: inner_node.pkey_size,
                     children,
                     children_num: inner_node.children_num,
-                })
+                }))
             }
             ARTInnerNode::Inner256(_) => panic!("This node cannot grow!"),
         }
