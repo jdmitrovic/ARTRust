@@ -1,11 +1,9 @@
 #![deny(rust_2018_idioms)]
-#![feature(new_uninit, portable_simd, test)]
+#![feature(new_uninit, portable_simd)]
 
 pub mod keys;
 pub mod node;
 pub mod tree;
-
-pub mod benches;
 
 use keys::ARTKey;
 use node::ARTLink;
@@ -77,5 +75,22 @@ mod tests {
         assert_eq!(23, *art.find(String::from("Jerry")).unwrap());
         assert_eq!(23, *art.find(String::from("Jenson")).unwrap());
         assert_eq!(50, *art.find(String::from("Wendell")).unwrap());
+    }
+
+    #[test]
+    fn insert_1k() {
+        use rand_pcg::Pcg64;
+        use rand::{ SeedableRng, Rng };
+
+        const SEED: u64 = 59;
+
+        let mut rng = Pcg64::seed_from_u64(SEED);
+        let mut keys: Vec<u64> = vec![0; 10000];
+        rng.fill(&mut keys[..]);
+        let mut art = ARTree::<u64, u64>::new();
+
+        for key in keys.iter() {
+                art.insert_or_update(*key, *key + 1);
+        }
     }
 }

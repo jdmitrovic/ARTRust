@@ -85,14 +85,12 @@ impl<V> ARTInner16<V> {
         if !cmp.any() {
             return None;
         }
-        let mask = (1 << self.children_num) - 1; // TODO: probably wrong?
-        let bitfield = cmp.to_bitmask() & mask;
+        // let mask = (1i32 << self.children_num) - 1; // TODO: probably wrong?
+        // let bitfield = cmp.to_bitmask() & mask;
 
-        if bitfield != 0 {
-            Some(bitfield.leading_zeros() as usize)
-        } else {
-            None
-        }
+        let bitfield = &cmp.to_array()[..self.children_num as usize];
+
+        bitfield.iter().position(|&elem| elem)
     }
 
     fn boxed(pkey_size: u8) -> Box<Self> {
