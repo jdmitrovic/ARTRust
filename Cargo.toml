@@ -2,9 +2,11 @@
 name = "rust_art"
 version = "0.1.0"
 authors = ["jovan <jdmitrovic@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 crunchy = "0.2.2"
 rand_pcg = "0.3.1"
 rand = "0.8.5"
+enum_dispatch = "0.3.8"
+auto_impl = "1.0.1"

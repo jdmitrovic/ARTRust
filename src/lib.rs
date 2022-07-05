@@ -1,44 +1,24 @@
-#![feature(box_patterns)]
-#![feature(test)]
+#![deny(rust_2018_idioms)]
+#![feature(new_uninit, portable_simd, test)]
 
+pub mod keys;
 pub mod node;
 pub mod tree;
-pub mod keys;
 
-use node::ARTLink;
+pub mod benches;
+
 use keys::ARTKey;
+use node::ARTLink;
 use std::marker::PhantomData;
-
-extern crate test;
 
 pub struct ARTree<K: ARTKey, V> {
     root: ARTLink<V>,
     _marker: PhantomData<K>,
 }
 
-#[macro_export]
-macro_rules! initialize_array {
-   ($l: tt, $t: ty) => {{
-        use std::mem::MaybeUninit;
-        use std::mem::transmute;
-
-        let mut arr: [MaybeUninit<$t>; $l] = unsafe {
-            MaybeUninit::uninit().assume_init()
-        };
-
-        for item in &mut arr[..] {
-            item.write(None);
-        }
-
-        unsafe { transmute::<_, [$t; $l]>(arr) }
-   }};
-}
-
 #[cfg(test)]
 mod tests {
     use crate::ARTree;
-    use test::Bencher;
-
     #[test]
     fn it_works() {
         let mut art: ARTree<String, u32> = ARTree::new();
@@ -98,108 +78,4 @@ mod tests {
         assert_eq!(23, *art.find(String::from("Jenson")).unwrap());
         assert_eq!(50, *art.find(String::from("Wendell")).unwrap());
     }
-
-    use rand_pcg::Pcg64;
-    use rand::{SeedableRng, Rng};
-        use std::collections::{ BTreeMap, HashMap };
-
-    const SEED: u64 = 59;
-
-    #[bench]
-    fn art_insert_1k(b: &mut Bencher) {
-        let mut rng = Pcg64::seed_from_u64(SEED);
-        let mut keys: Vec<u64> = vec![0; 1000];
-        let mut art = ARTree::<u64, u64>::new();
-
-        rng.fill(&mut keys[..]);
-        b.iter(|| {
-            for key in &keys {
-                art.insert_or_update(*key, *key + 1);
-            }
-        });
-    }
-
-    #[bench]
-    fn hashmap_insert_1k(b: &mut Bencher) {
-        let mut rng = Pcg64::seed_from_u64(SEED);
-        let mut keys: Vec<u64> = vec![0; 1000];
-        let mut hmap = HashMap::<u64, u64>::new();
-
-        rng.fill(&mut keys[..]);
-        b.iter(|| {
-            for key in &keys {
-                hmap.insert(*key, *key + 1);
-            }
-        });
-    }
-
-    #[bench]
-    fn btree_insert_1k(b: &mut Bencher) {
-        let mut rng = Pcg64::seed_from_u64(SEED);
-        let mut keys: Vec<u64> = vec![0; 1000];
-        let mut btree = BTreeMap::<u64, u64>::new();
-
-        rng.fill(&mut keys[..]);
-        b.iter(|| {
-            for key in &keys {
-                btree.insert(*key, *key + 1);
-            }
-        });
-    }
-
-    // #[bench]
-    // fn art_find_1k(b: &mut Bencher) {
-    //     let mut rng = Pcg64::seed_from_u64(SEED);
-    //     let mut keys: Vec<u64> = vec![0; 900];
-    //     let mut art = ARTree::<u64, u64>::new();
-    //     rng.fill(&mut keys[..]);
-
-    //     for key in &keys {
-    //         art.insert_or_update(*key, *key + 1);
-    //     }
-
-    //     b.iter(|| {
-    //         for key in &keys {
-    //             dbg!(*key);
-    //             assert_eq!(*art.find(*key).unwrap(), *key + 1);
-    //         }
-    //     });
-    // }
-
-    // #[bench]
-    // fn hmap_find_1k(b: &mut Bencher) {
-    //     let mut rng = Pcg64::seed_from_u64(SEED);
-    //     let mut keys: Vec<u64> = vec![0; 900];
-    //     rng.fill(&mut keys[..]);
-    //     let mut hmap = HashMap::<u64, u64>::new();
-
-    //     for key in &keys {
-    //         hmap.insert(*key, *key + 1);
-    //     }
-
-    //     b.iter(|| {
-    //         for key in &keys {
-    //             assert_eq!(*hmap.get(key).unwrap(), *key + 1);
-    //         }
-    //     });
-    // }
-
-    // #[bench]
-    // fn btree_find_1k(b: &mut Bencher) {
-    //     let mut rng = Pcg64::seed_from_u64(SEED);
-    //     let mut keys: Vec<u64> = vec![0; 1000];
-    //     let mut btree = BTreeMap::<u64, u64>::new();
-
-    //     rng.fill(&mut keys[..]);
-
-    //     for key in &keys {
-    //         btree.insert(*key, *key + 1);
-    //     }
-
-    //     b.iter(|| {
-    //         for key in &keys {
-    //             assert_eq!(*btree.get(key).unwrap(), *key + 1);
-    //         }
-    //     });
-    // }
 }
