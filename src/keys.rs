@@ -1,23 +1,19 @@
 use std::cmp::Ordering;
 use std::iter::zip;
-use std::rc::Rc;
 
-pub trait ARTKey: Sized {
+pub type ByteKey = Vec<u8>;
+
+pub trait ARTKey {
     type Bytes: AsRef<[u8]>;
+
     fn convert_to_bytes(self) -> Self::Bytes;
-    // todo: smallvec?
-    fn into_byte_key(self) -> ByteKey {
-        self.convert_to_bytes().as_ref().into()
-    }
 }
 
 impl ARTKey for String {
     type Bytes = Vec<u8>;
+
     fn convert_to_bytes(self) -> Self::Bytes {
         self.into_bytes()
-    }
-    fn into_byte_key(self) -> ByteKey {
-        self.into_bytes().into()
     }
 }
 
@@ -43,7 +39,6 @@ ArtKeyNumImpl!(isize);
 ArtKeyNumImpl!(f32);
 ArtKeyNumImpl!(f64);
 
-pub type ByteKey = Rc<[u8]>;
 
 pub enum PartialKeyComp {
     PartialMatch(usize),

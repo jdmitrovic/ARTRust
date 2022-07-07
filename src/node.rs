@@ -1,14 +1,12 @@
+use crate::keys::ByteKey;
 use std::iter::zip;
 use std::ptr::addr_of_mut;
-use std::rc::Rc;
-use std::simd::{u8x16, ToBitMask};
+use std::simd::u8x16;
 
 use crunchy::{self, unroll};
 
 use auto_impl::auto_impl;
 use enum_dispatch::enum_dispatch;
-
-use crate::keys::ByteKey;
 
 pub enum ARTNode<V> {
     Inner(ARTInnerNode<V>, ByteKey, Option<V>),
@@ -18,34 +16,30 @@ pub enum ARTNode<V> {
 pub type ARTLink<V> = Option<ARTNode<V>>;
 
 pub struct ARTInner4<V> {
-    pkey_size: u8,
     keys: [Option<u8>; 4],
     children: [ARTLink<V>; 4],
     children_num: u8,
 }
 
 pub struct ARTInner16<V> {
-    pkey_size: u8,
     keys: u8x16,
     children: [ARTLink<V>; 16],
     children_num: u8,
 }
 
 pub struct ARTInner48<V> {
-    pkey_size: u8,
     keys: [Option<u8>; 256],
     children: [ARTLink<V>; 48],
     children_num: u8,
 }
 
 pub struct ARTInner256<V> {
-    pkey_size: u8,
     children: [ARTLink<V>; 256],
     children_num: u8,
 }
 
 pub struct ARTLeaf<V> {
-    key: ByteKey,
+    pkey: ByteKey,
     value: V,
 }
 
@@ -63,11 +57,10 @@ impl<V> ARTInner4<V> {
         self.keys.iter().position(|k| *k == Some(key_byte))
     }
 
-    fn boxed(pkey_size: u8) -> Box<Self> {
+    fn boxed() -> Box<Self> {
         let mut uninit = Box::<Self>::new_uninit();
         let this = uninit.as_mut_ptr();
         unsafe {
-            addr_of_mut!((*this).pkey_size).write(pkey_size);
             addr_of_mut!((*this).children_num).write(0);
             for i in 0..4 {
                 addr_of_mut!((*this).keys[i]).write(None);
@@ -88,16 +81,15 @@ impl<V> ARTInner16<V> {
         // let mask = (1i32 << self.children_num) - 1; // TODO: probably wrong?
         // let bitfield = cmp.to_bitmask() & mask;
 
-        let bitfield = &cmp.to_array()[..self.children_num as usize];
+        let bitfield = &cmp.to_array();
 
-        bitfield.iter().position(|&elem| elem)
+        bitfield.iter().take(self.children_num as usize).position(|&elem| elem)
     }
 
-    fn boxed(pkey_size: u8) -> Box<Self> {
+    fn boxed() -> Box<Self> {
         let mut uninit = Box::<Self>::new_uninit();
         let this = uninit.as_mut_ptr();
         unsafe {
-            addr_of_mut!((*this).pkey_size).write(pkey_size);
             addr_of_mut!((*this).children_num).write(0);
             addr_of_mut!((*this).keys).write([0; 16].into());
             for i in 0..16 {
@@ -109,11 +101,10 @@ impl<V> ARTInner16<V> {
 }
 
 impl<V> ARTInner48<V> {
-    fn boxed(pkey_size: u8) -> Box<Self> {
+    fn boxed() -> Box<Self> {
         let mut uninit = Box::<Self>::new_uninit();
         let this = uninit.as_mut_ptr();
         unsafe {
-            addr_of_mut!((*this).pkey_size).write(pkey_size);
             addr_of_mut!((*this).children_num).write(0);
             for i in 0..256 {
                 addr_of_mut!((*this).keys[i]).write(None);
@@ -127,11 +118,10 @@ impl<V> ARTInner48<V> {
 }
 
 impl<V> ARTInner256<V> {
-    fn boxed(pkey_size: u8) -> Box<Self> {
+    fn boxed() -> Box<Self> {
         let mut uninit = Box::<Self>::new_uninit();
         let this = uninit.as_mut_ptr();
         unsafe {
-            addr_of_mut!((*this).pkey_size).write(pkey_size);
             addr_of_mut!((*this).children_num).write(0);
             for i in 0..256 {
                 addr_of_mut!((*this).children[i]).write(None);
@@ -142,23 +132,36 @@ impl<V> ARTInner256<V> {
 }
 
 impl<V> ARTLeaf<V> {
-    pub fn new(byte_key: &ByteKey, value: V) -> Self {
+    pub fn new(pkey: ByteKey, value: V) -> Self {
         ARTLeaf {
-            key: Rc::clone(byte_key),
+            pkey,
             value,
         }
     }
 
-    pub fn new_bytekey(key: &ByteKey, value: V) -> Self {
-        ARTLeaf {
-            key: Rc::clone(key),
-            value,
-        }
+    // pub fn new_bytekey(key: &ByteKey, value: V) -> Self {
+    //     ARTLeaf {
+    //         key: Bytes::clone(key),
+    //         value,
+    //     }
+    // }
+
+    pub fn pkey(&self) -> &[u8] {
+        &self.pkey
     }
 
-    pub fn key(&self) -> &[u8] {
-        &self.key
+    pub fn pkey_mut(&mut self) -> &mut ByteKey {
+        &mut self.pkey
     }
+
+    pub fn take_pkey_and_value(self) -> (ByteKey, V) {
+        (self.pkey, self.value)
+    }
+
+    pub fn shrink_pkey(&mut self, len: usize) {
+        self.pkey.drain(0..self.pkey.len() - len);
+    }
+
 
     pub fn value(&self) -> &V {
         &self.value
@@ -176,11 +179,8 @@ impl<V> ARTLeaf<V> {
 #[enum_dispatch]
 #[auto_impl(Box)]
 pub trait InnerNode<V> {
-    fn partial_key_size(&self) -> u8;
-    fn reduce_pkey_size(&mut self, r: u8);
-
-    fn add_child(&mut self, byte_key: &ByteKey, value: V, key_byte: u8) {
-        self.add_node(ARTNode::Leaf(ARTLeaf::new(byte_key, value)), key_byte)
+    fn add_child(&mut self, pkey: ByteKey, value: V, key_byte: u8) {
+        self.add_node(ARTNode::Leaf(ARTLeaf::new(pkey, value)), key_byte)
     }
 
     fn add_node(&mut self, new_node: ARTNode<V>, key_byte: u8);
@@ -195,14 +195,6 @@ pub trait InnerNode<V> {
 }
 
 impl<V> InnerNode<V> for ARTInner4<V> {
-    fn partial_key_size(&self) -> u8 {
-        self.pkey_size
-    }
-
-    fn reduce_pkey_size(&mut self, r: u8) {
-        self.pkey_size -= r;
-    }
-
     fn add_node(&mut self, new_node: ARTNode<V>, key_byte: u8) {
         assert!(!self.is_full());
         let num = self.children_num as usize;
@@ -242,7 +234,7 @@ impl<V> InnerNode<V> for ARTInner4<V> {
     fn grow(self) -> ARTInnerNode<V> {
         assert_eq!(self.children_num, 4);
 
-        let mut node = ARTInner16::boxed(self.pkey_size);
+        let mut node = ARTInner16::boxed();
         node.children_num = self.children_num;
 
         for (new, old) in zip(&mut node.children, self.children) {
@@ -258,14 +250,6 @@ impl<V> InnerNode<V> for ARTInner4<V> {
 }
 
 impl<V> InnerNode<V> for ARTInner16<V> {
-    fn partial_key_size(&self) -> u8 {
-        self.pkey_size
-    }
-
-    fn reduce_pkey_size(&mut self, r: u8) {
-        self.pkey_size -= r;
-    }
-
     fn add_node(&mut self, new_node: ARTNode<V>, key_byte: u8) {
         assert!(!self.is_full());
 
@@ -296,7 +280,7 @@ impl<V> InnerNode<V> for ARTInner16<V> {
     fn shrink(mut self) -> ARTInnerNode<V> {
         assert_eq!(self.children_num, 4);
 
-        let mut node = ARTInner4::boxed(self.pkey_size);
+        let mut node = ARTInner4::boxed();
 
         unroll! {
             for i in 0..4 {
@@ -324,7 +308,7 @@ impl<V> InnerNode<V> for ARTInner16<V> {
     fn grow(mut self) -> ARTInnerNode<V> {
         assert_eq!(self.children_num, 16);
 
-        let mut node = ARTInner48::boxed(self.pkey_size);
+        let mut node = ARTInner48::boxed();
         node.children_num = self.children_num;
 
         unroll! {
@@ -339,14 +323,6 @@ impl<V> InnerNode<V> for ARTInner16<V> {
 }
 
 impl<V> InnerNode<V> for ARTInner48<V> {
-    fn partial_key_size(&self) -> u8 {
-        self.pkey_size
-    }
-
-    fn reduce_pkey_size(&mut self, r: u8) {
-        self.pkey_size -= r;
-    }
-
     fn add_node(&mut self, new_node: ARTNode<V>, key_byte: u8) {
         assert!(!self.is_full());
 
@@ -368,7 +344,7 @@ impl<V> InnerNode<V> for ARTInner48<V> {
     fn shrink(mut self) -> ARTInnerNode<V> {
         assert_eq!(self.children_num, 16);
 
-        let mut node = ARTInner16::boxed(self.pkey_size);
+        let mut node = ARTInner16::boxed();
 
         // temp_keys wasn't getting used
         for (i, index) in self.keys.into_iter().flatten().enumerate() {
@@ -399,7 +375,7 @@ impl<V> InnerNode<V> for ARTInner48<V> {
     fn grow(mut self) -> ARTInnerNode<V> {
         assert_eq!(self.children_num, 48);
 
-        let mut node = ARTInner256::boxed(self.pkey_size);
+        let mut node = ARTInner256::boxed();
         node.children_num = self.children_num;
 
         for (child, key) in zip(&mut node.children, self.keys) {
@@ -413,14 +389,6 @@ impl<V> InnerNode<V> for ARTInner48<V> {
 }
 
 impl<V> InnerNode<V> for ARTInner256<V> {
-    fn partial_key_size(&self) -> u8 {
-        self.pkey_size
-    }
-
-    fn reduce_pkey_size(&mut self, r: u8) {
-        self.pkey_size -= r;
-    }
-
     fn add_node(&mut self, new_node: ARTNode<V>, key_byte: u8) {
         assert!(!self.is_full());
 
@@ -441,7 +409,7 @@ impl<V> InnerNode<V> for ARTInner256<V> {
     fn shrink(self) -> ARTInnerNode<V> {
         assert_eq!(self.children_num, 48);
 
-        let mut node = ARTInner48::boxed(self.pkey_size);
+        let mut node = ARTInner48::boxed();
 
         for (i, child) in self.children.into_iter().enumerate() {
             if child.is_some() {
@@ -480,13 +448,8 @@ pub enum ARTInnerNode<V> {
 }
 
 impl<V> ARTInnerNode<V> {
-    pub fn new_inner_4(pkey_size: u8) -> Self {
-        let (keys, children, children_num) = Default::default();
-        Self::Inner4(Box::new(ARTInner4 {
-            pkey_size,
-            keys,
-            children,
-            children_num,
-        }))
+    pub fn new_inner_4() -> Self {
+        let node = ARTInner4::boxed();
+        Self::Inner4(node)
     }
 }
