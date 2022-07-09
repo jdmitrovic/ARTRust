@@ -210,6 +210,7 @@ impl<V> InnerNode<V> for ARTInner4<V> {
 
     fn remove_child(&mut self, key_byte: u8) -> Option<V> {
         let i = self.key(key_byte)?;
+        self.children_num -= 1;
         self.keys[i] = None;
         self.children[i].take()?.try_into_leaf_value()
     }
@@ -338,6 +339,7 @@ impl<V> InnerNode<V> for ARTInner48<V> {
 
     fn remove_child(&mut self, key_byte: u8) -> Option<V> {
         let i = self.keys[key_byte as usize].take()?;
+        self.children_num -= 1;
         self.children[i as usize].take()?.try_into_leaf_value()
     }
 
@@ -401,9 +403,9 @@ impl<V> InnerNode<V> for ARTInner256<V> {
     }
 
     fn remove_child(&mut self, key_byte: u8) -> Option<V> {
-        self.children[key_byte as usize]
-            .take()?
-            .try_into_leaf_value()
+        let child = self.children[key_byte as usize] .take()?;
+        self.children_num -= 1;
+        child.try_into_leaf_value()
     }
 
     fn shrink(self) -> ARTInnerNode<V> {
