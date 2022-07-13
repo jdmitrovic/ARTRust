@@ -199,7 +199,14 @@ impl<K: ARTKey, V> ARTree<K, V> {
                 }
 
                 let former_val = inner.remove_child(key_bytes[depth]);
-                *current_link = Some(ARTNode::Inner(inner, pkey, val));
+
+                let new_inner = if inner.is_shrinkable() {
+                    inner.shrink()
+                } else {
+                    inner
+                };
+
+                *current_link = Some(ARTNode::Inner(new_inner, pkey, val));
                 former_val
             }
             ARTNode::Leaf(leaf) => {

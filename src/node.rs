@@ -53,7 +53,7 @@ impl<V> ARTNode<V> {
 }
 
 impl<V> ARTInner4<V> {
-    fn key(&self, key_byte: u8) -> Option<usize> {
+    fn child_index(&self, key_byte: u8) -> Option<usize> {
         self.keys.iter().position(|k| *k == Some(key_byte))
     }
 
@@ -78,12 +78,10 @@ impl<V> ARTInner16<V> {
         if !cmp.any() {
             return None;
         }
-        // let mask = (1i32 << self.children_num) - 1; // TODO: probably wrong?
-        // let bitfield = cmp.to_bitmask() & mask;
 
         let bitfield = &cmp.to_array();
 
-        bitfield.iter().take(self.children_num as usize).position(|&elem| elem)
+        bitfield.iter().take(self.children_num as usize).position(|&x| x)
     }
 
     fn boxed() -> Box<Self> {
@@ -139,13 +137,6 @@ impl<V> ARTLeaf<V> {
         }
     }
 
-    // pub fn new_bytekey(key: &ByteKey, value: V) -> Self {
-    //     ARTLeaf {
-    //         key: Bytes::clone(key),
-    //         value,
-    //     }
-    // }
-
     pub fn pkey(&self) -> &[u8] {
         &self.pkey
     }
@@ -190,7 +181,7 @@ pub trait InnerNode<V> {
     fn shrink(self) -> ARTInnerNode<V>;
     fn find_child(&self, key_byte: u8) -> Option<&ARTNode<V>>;
     fn is_full(&self) -> bool;
-    fn remove_one_child(&mut self);
+    fn is_shrinkable(&self) -> bool;
     fn grow(self) -> ARTInnerNode<V>;
 }
 
@@ -204,15 +195,21 @@ impl<V> InnerNode<V> for ARTInner4<V> {
     }
 
     fn find_child_mut(&mut self, key_byte: u8) -> Option<*mut ARTLink<V>> {
-        let i = self.key(key_byte)?;
+        let i = self.child_index(key_byte)?;
         Some(&mut self.children[i] as *mut _)
     }
 
     fn remove_child(&mut self, key_byte: u8) -> Option<V> {
-        let i = self.key(key_byte)?;
+        let index = self.child_index(key_byte)?;
+        let end = self.children_num as usize - 1;
+        if index != end {
+            self.keys[index] = self.keys[end];
+            self.children.swap(index, end);
+        }
+
+        self.keys[end] = None;
         self.children_num -= 1;
-        self.keys[i] = None;
-        self.children[i].take()?.try_into_leaf_value()
+        self.children[end].take().unwrap().try_into_leaf_value()
     }
 
     fn shrink(self) -> ARTInnerNode<V> {
@@ -220,7 +217,7 @@ impl<V> InnerNode<V> for ARTInner4<V> {
     }
 
     fn find_child(&self, key_byte: u8) -> Option<&ARTNode<V>> {
-        let i = self.key(key_byte)?;
+        let i = self.child_index(key_byte)?;
         self.children[i].as_ref()
     }
 
@@ -228,8 +225,8 @@ impl<V> InnerNode<V> for ARTInner4<V> {
         self.children_num >= 4
     }
 
-    fn remove_one_child(&mut self) {
-        self.children_num -= 1;
+    fn is_shrinkable(&self) -> bool {
+        false
     }
 
     fn grow(self) -> ARTInnerNode<V> {
@@ -267,15 +264,15 @@ impl<V> InnerNode<V> for ARTInner16<V> {
 
     fn remove_child(&mut self, key_byte: u8) -> Option<V> {
         let index = self.child_index(key_byte)?;
-
         let end = self.children_num as usize - 1;
+
         if index != end {
             self.keys[index] = self.keys[end];
             self.children.swap(index, end);
         }
 
         self.children_num -= 1;
-        self.children[end].take()?.try_into_leaf_value()
+        self.children[end].take().unwrap().try_into_leaf_value()
     }
 
     fn shrink(mut self) -> ARTInnerNode<V> {
@@ -290,6 +287,7 @@ impl<V> InnerNode<V> for ARTInner16<V> {
             }
         }
 
+        node.children_num = self.children_num;
         node.into()
     }
 
@@ -302,8 +300,8 @@ impl<V> InnerNode<V> for ARTInner16<V> {
         self.children_num >= 16
     }
 
-    fn remove_one_child(&mut self) {
-        self.children_num -= 1;
+    fn is_shrinkable(&self) -> bool {
+        self.children_num <= 4
     }
 
     fn grow(mut self) -> ARTInnerNode<V> {
@@ -338,26 +336,35 @@ impl<V> InnerNode<V> for ARTInner48<V> {
     }
 
     fn remove_child(&mut self, key_byte: u8) -> Option<V> {
-        let i = self.keys[key_byte as usize].take()?;
+        let index = self.keys[key_byte as usize].take()?;
+        let end = self.children_num - 1;
+        if index != end {
+            self.children.swap(index as usize, end as usize);
+            self.keys.iter_mut().find(|x| **x == Some(end))
+                                .unwrap()
+                                .replace(index);
+        }
+
         self.children_num -= 1;
-        self.children[i as usize].take()?.try_into_leaf_value()
+        self.children[end as usize].take().unwrap().try_into_leaf_value()
     }
 
     fn shrink(mut self) -> ARTInnerNode<V> {
         assert_eq!(self.children_num, 16);
 
         let mut node = ARTInner16::boxed();
+        let mut children_num: u8 = 0;
 
         // temp_keys wasn't getting used
-        for (i, index) in self.keys.into_iter().flatten().enumerate() {
-            node.children[i] = self.children[index as usize].take();
-            node.children_num += 1;
+        for (i, index) in self.keys.into_iter().enumerate() {
+            if let Some(idx) = index {
+                node.children[children_num as usize] = self.children[idx as usize].take();
+                node.keys[children_num as usize] = i as u8;
+                children_num += 1;
+            }
         }
 
-        for i in 0..16 {
-            node.keys[i] = self.keys[i].unwrap();
-        }
-
+        node.children_num = children_num;
         node.into()
     }
 
@@ -370,8 +377,8 @@ impl<V> InnerNode<V> for ARTInner48<V> {
         self.children_num >= 48
     }
 
-    fn remove_one_child(&mut self) {
-        self.children_num -= 1;
+    fn is_shrinkable(&self) -> bool {
+        self.children_num <= 16
     }
 
     fn grow(mut self) -> ARTInnerNode<V> {
@@ -394,7 +401,9 @@ impl<V> InnerNode<V> for ARTInner256<V> {
     fn add_node(&mut self, new_node: ARTNode<V>, key_byte: u8) {
         assert!(!self.is_full());
 
-        self.children[key_byte as usize].replace(new_node);
+        if self.children[key_byte as usize].replace(new_node).is_some() {
+            panic!("Filled up spot!");
+        }
         self.children_num += 1;
     }
 
@@ -403,7 +412,7 @@ impl<V> InnerNode<V> for ARTInner256<V> {
     }
 
     fn remove_child(&mut self, key_byte: u8) -> Option<V> {
-        let child = self.children[key_byte as usize] .take()?;
+        let child = self.children[key_byte as usize].take()?;
         self.children_num -= 1;
         child.try_into_leaf_value()
     }
@@ -415,6 +424,7 @@ impl<V> InnerNode<V> for ARTInner256<V> {
 
         for (i, child) in self.children.into_iter().enumerate() {
             if child.is_some() {
+                dbg!(node.children_num);
                 node.children[node.children_num as usize] = child;
                 node.keys[i] = Some(node.children_num);
                 node.children_num += 1;
@@ -432,8 +442,8 @@ impl<V> InnerNode<V> for ARTInner256<V> {
         false
     }
 
-    fn remove_one_child(&mut self) {
-        self.children_num -= 1;
+    fn is_shrinkable(&self) -> bool {
+        self.children_num <= 48
     }
 
     fn grow(self) -> ARTInnerNode<V> {
