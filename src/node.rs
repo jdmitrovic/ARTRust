@@ -1,7 +1,8 @@
 use crate::keys::ByteKey;
-use std::iter::zip;
+use std::{iter::zip, simd::ToBitMask};
 use std::ptr::addr_of_mut;
 use std::simd::u8x16;
+use std::simd::Simd;
 
 use crunchy::{self, unroll};
 
@@ -35,7 +36,7 @@ pub struct ARTInner48<V> {
 
 pub struct ARTInner256<V> {
     children: [ARTLink<V>; 256],
-    children_num: u8,
+    children_num: usize,
 }
 
 pub struct ARTLeaf<V> {
@@ -54,7 +55,7 @@ impl<V> ARTNode<V> {
 
 impl<V> ARTInner4<V> {
     fn child_index(&self, key_byte: u8) -> Option<usize> {
-        self.keys.iter().position(|k| *k == Some(key_byte))
+        self.keys.iter().position(|&k| k == Some(key_byte))
     }
 
     fn boxed() -> Box<Self> {
@@ -73,15 +74,20 @@ impl<V> ARTInner4<V> {
 
 impl<V> ARTInner16<V> {
     fn child_index(&self, key_byte: u8) -> Option<usize> {
-        let key = u8x16::splat(key_byte);
+        let key: Simd<u8, 16> = u8x16::splat(key_byte);
         let cmp = self.keys.lanes_eq(key);
         if !cmp.any() {
             return None;
         }
 
-        let bitfield = &cmp.to_array();
+        let bitfield: u16 = cmp.to_bitmask();
+        let idx = bitfield.trailing_zeros();
 
-        bitfield.iter().take(self.children_num as usize).position(|&x| x)
+        if idx < self.children_num as u32 {
+            Some(idx as usize)
+        } else {
+            None
+        }
     }
 
     fn boxed() -> Box<Self> {
@@ -188,6 +194,7 @@ pub trait InnerNode<V> {
 impl<V> InnerNode<V> for ARTInner4<V> {
     fn add_node(&mut self, new_node: ARTNode<V>, key_byte: u8) {
         assert!(!self.is_full());
+
         let num = self.children_num as usize;
         self.keys[num] = Some(key_byte);
         self.children[num] = Some(new_node);
@@ -202,6 +209,7 @@ impl<V> InnerNode<V> for ARTInner4<V> {
     fn remove_child(&mut self, key_byte: u8) -> Option<V> {
         let index = self.child_index(key_byte)?;
         let end = self.children_num as usize - 1;
+
         if index != end {
             self.keys[index] = self.keys[end];
             self.children.swap(index, end);
@@ -283,7 +291,7 @@ impl<V> InnerNode<V> for ARTInner16<V> {
         unroll! {
             for i in 0..4 {
                 node.children[i] = self.children[i].take();
-                node.keys[self.keys[i] as usize] = Some(i as u8);
+                node.keys[i] = Some(self.keys[i]);
             }
         }
 
@@ -326,7 +334,10 @@ impl<V> InnerNode<V> for ARTInner48<V> {
         assert!(!self.is_full());
 
         self.children[self.children_num as usize] = Some(new_node);
-        self.keys[key_byte as usize] = Some(self.children_num);
+        if self.keys[key_byte as usize].replace(self.children_num).is_some() {
+            panic!("Inner48 adds node on filled spot!");
+        }
+
         self.children_num += 1;
     }
 
@@ -338,6 +349,7 @@ impl<V> InnerNode<V> for ARTInner48<V> {
     fn remove_child(&mut self, key_byte: u8) -> Option<V> {
         let index = self.keys[key_byte as usize].take()?;
         let end = self.children_num - 1;
+
         if index != end {
             self.children.swap(index as usize, end as usize);
             self.keys.iter_mut().find(|x| **x == Some(end))
@@ -355,7 +367,6 @@ impl<V> InnerNode<V> for ARTInner48<V> {
         let mut node = ARTInner16::boxed();
         let mut children_num: u8 = 0;
 
-        // temp_keys wasn't getting used
         for (i, index) in self.keys.into_iter().enumerate() {
             if let Some(idx) = index {
                 node.children[children_num as usize] = self.children[idx as usize].take();
@@ -385,22 +396,20 @@ impl<V> InnerNode<V> for ARTInner48<V> {
         assert_eq!(self.children_num, 48);
 
         let mut node = ARTInner256::boxed();
-        node.children_num = self.children_num;
 
-        for (child, key) in zip(&mut node.children, self.keys) {
-            if let Some(old_index) = key {
-                *child = self.children[old_index as usize].take();
+        for (i, &key) in self.keys.iter().enumerate() {
+            if let Some(index) = key {
+                node.children[i] = self.children[index as usize].take();
             }
         }
 
+        node.children_num = self.children_num as usize;
         node.into()
     }
 }
 
 impl<V> InnerNode<V> for ARTInner256<V> {
     fn add_node(&mut self, new_node: ARTNode<V>, key_byte: u8) {
-        assert!(!self.is_full());
-
         if self.children[key_byte as usize].replace(new_node).is_some() {
             panic!("Filled up spot!");
         }
@@ -408,7 +417,13 @@ impl<V> InnerNode<V> for ARTInner256<V> {
     }
 
     fn find_child_mut(&mut self, key_byte: u8) -> Option<*mut ARTLink<V>> {
-        Some(&mut self.children[key_byte as usize] as *mut _)
+        let node = &mut self.children[key_byte as usize];
+
+        if node.is_none() {
+            return None;
+        }
+
+        Some(node as *mut _)
     }
 
     fn remove_child(&mut self, key_byte: u8) -> Option<V> {
@@ -421,16 +436,17 @@ impl<V> InnerNode<V> for ARTInner256<V> {
         assert_eq!(self.children_num, 48);
 
         let mut node = ARTInner48::boxed();
+        let mut children_num: u8 = 0;
 
         for (i, child) in self.children.into_iter().enumerate() {
             if child.is_some() {
-                dbg!(node.children_num);
-                node.children[node.children_num as usize] = child;
-                node.keys[i] = Some(node.children_num);
-                node.children_num += 1;
+                node.children[children_num as usize] = child;
+                node.keys[i] = Some(children_num);
+                children_num += 1;
             }
         }
 
+        node.children_num = children_num;
         node.into()
     }
 

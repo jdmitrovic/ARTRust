@@ -17,6 +17,9 @@ pub struct ARTree<K: ARTKey, V> {
 #[cfg(test)]
 mod tests {
     use crate::ARTree;
+    use rand_pcg::Pcg64;
+    use rand::{ SeedableRng, Rng };
+
     #[test]
     fn it_works() {
         let mut art: ARTree<String, u32> = ARTree::new();
@@ -80,8 +83,6 @@ mod tests {
 
     #[test]
     fn insert_100k() {
-        use rand_pcg::Pcg64;
-        use rand::{ SeedableRng, Rng };
         const SEED: u64 = 59;
 
         let mut rng = Pcg64::seed_from_u64(SEED);
@@ -89,36 +90,41 @@ mod tests {
         rng.fill(&mut keys[..]);
         let mut art = ARTree::<u64, u64>::new();
 
-        for key in keys.iter() {
-                art.insert_or_update(*key, *key + 1);
+        for &key in keys.iter() {
+                art.insert_or_update(key, key + 1);
         }
     }
 
     #[test]
     fn insert_update_delete_find() {
-        use rand_pcg::Pcg64;
-        use rand::{ SeedableRng, Rng };
-
         const SEED: u64 = 10;
 
         let mut rng = Pcg64::seed_from_u64(SEED);
-        let mut keys: Vec<u64> = vec![0; 10_000];
+        let mut keys: Vec<u64> = vec![0; 100_000];
         rng.fill(&mut keys[..]);
         let mut art = ARTree::<u64, u64>::new();
 
-        for key in keys.iter() {
-            art.insert_or_update(*key, *key + 1);
+        for &key in keys.iter() {
+            art.insert_or_update(key, key + 1);
         }
 
-        for key in keys.iter() {
-            assert_eq!(*key + 1, *art.find(*key).unwrap());
+        for &key in keys.iter() {
+            assert_eq!(key + 1, *art.find(key).unwrap());
         }
 
         const SEED_DEL: u64 = 13;
 
-        for key in keys.iter() {
-            if *key % SEED_DEL == 0 {
-                art.delete(*key);
+        for &key in keys.iter() {
+            if key % SEED_DEL == 0 {
+                art.delete(key);
+            }
+        }
+
+        for &key in keys.iter() {
+            if key % SEED_DEL == 0 {
+                assert_eq!(None, art.find(key));
+            } else {
+                assert_eq!(key + 1, *art.find(key).unwrap());
             }
         }
     }

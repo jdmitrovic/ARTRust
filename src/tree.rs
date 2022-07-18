@@ -155,7 +155,6 @@ impl<K: ARTKey, V> ARTree<K, V> {
         let key_len = key_bytes.len();
         let mut current_link = &mut self.root;
         let mut depth: usize = 0;
-        let mut leaf_comp_full = false;
 
         while let Some(ARTNode::Inner(ref mut inner, ref pkey, _)) = current_link {
             let pk_size = pkey.len();
@@ -176,7 +175,6 @@ impl<K: ARTKey, V> ARTree<K, V> {
                     if let LeafKeyComp::FullMatch =
                         compare_leaf_keys(leaf.pkey(), &key_bytes[depth + 1..])
                     {
-                        leaf_comp_full = true;
                         break;
                     } else {
                         return None;
@@ -211,7 +209,8 @@ impl<K: ARTKey, V> ARTree<K, V> {
             }
             ARTNode::Leaf(leaf) => {
                 // only if tree consists only of one leaf node
-                if leaf_comp_full {
+                let leaf_comp = compare_leaf_keys(leaf.pkey(), &key_bytes);
+                if let LeafKeyComp::FullMatch = leaf_comp {
                     Some(leaf.take_value())
                 } else {
                     *current_link = Some(ARTNode::Leaf(leaf));
