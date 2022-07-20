@@ -21,7 +21,7 @@ mod tests {
     use rand::{ SeedableRng, Rng };
 
     #[test]
-    fn it_works() {
+    fn string_art() {
         let mut art: ARTree<String, u32> = ARTree::new();
 
         art.insert_or_update(String::from("Jason"), 26);
@@ -81,19 +81,6 @@ mod tests {
         assert_eq!(50, *art.find(String::from("Wendell")).unwrap());
     }
 
-    #[test]
-    fn insert_100k() {
-        const SEED: u64 = 59;
-
-        let mut rng = Pcg64::seed_from_u64(SEED);
-        let mut keys: Vec<u64> = vec![0; 100_000];
-        rng.fill(&mut keys[..]);
-        let mut art = ARTree::<u64, u64>::new();
-
-        for &key in keys.iter() {
-                art.insert_or_update(key, key + 1);
-        }
-    }
 
     #[test]
     fn insert_update_delete_find() {
@@ -103,6 +90,7 @@ mod tests {
         let mut keys: Vec<u64> = vec![0; 100_000];
         rng.fill(&mut keys[..]);
         let mut art = ARTree::<u64, u64>::new();
+
 
         for &key in keys.iter() {
             art.insert_or_update(key, key + 1);
@@ -126,6 +114,21 @@ mod tests {
             } else {
                 assert_eq!(key + 1, *art.find(key).unwrap());
             }
+        }
+    }
+
+    #[test]
+    fn insert_profiling() {
+        const SEED: u64 = 10;
+
+        let mut rng = Pcg64::seed_from_u64(SEED);
+        let mut keys: Vec<u64> = vec![0; 1_000_000];
+        rng.fill(&mut keys[..]);
+        let mut art = ARTree::<u64, u64>::new();
+
+
+        for &key in keys.iter() {
+            art.insert_or_update(key, key + 1);
         }
     }
 }

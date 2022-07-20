@@ -74,16 +74,3 @@ pub fn compare_pkeys(pkey_1: &[u8], pkey_2: &[u8]) -> PartialKeyComp {
         Some(pos) => PartialKeyComp::PartialMatch(pos),
     }
 }
-
-// pub fn compare_leaf_keys(pkey_1: &[u8], pkey_2: &[u8]) -> PartialKeyComp {
-//     let len1 = pkey_1.len();
-//     let len2 = pkey_2.len();
-//     if len1 != len2 {
-//         return PartialKeyComp::PartialMatch(std::cmp::min(len1, len2));
-//     }
-
-//     match zip(pkey_1, pkey_2).position(|(a, b)| a != b) {
-//         Some(pos) => PartialKeyComp::PartialMatch(pos),
-//         None => PartialKeyComp::FullMatch(len1),
-//     }
-// }
