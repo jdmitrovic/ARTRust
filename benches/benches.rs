@@ -9,7 +9,7 @@ const SEED: u64 = 59;
 
 fn art_insert(art: &mut ARTree<u64, u64>, keys: &Vec<u64>) {
     for key in keys.iter() {
-        art.insert_or_update(*key, *key + 1);
+        art.insert(*key, *key + 1);
     }
 }
 
@@ -47,8 +47,8 @@ fn bench_inserts(c: &mut Criterion) {
     let mut rng = Pcg64::seed_from_u64(SEED);
 
     let mut group = c.benchmark_group("Inserts");
-    for i in [10_000, 100_000, 300_000, 500_000, 1_000_000].iter() {
-        let mut keys: Vec<u64> = vec![0; *i];
+    for i in (200_000..4_000_001).step_by(200_000) {
+        let mut keys: Vec<u64> = vec![0; i];
         rng.fill(&mut keys[..]);
         let mut art = ARTree::<u64, u64>::new();
         let mut hmap = HashMap::<u64, u64>::new();
@@ -68,15 +68,15 @@ fn bench_finds(c: &mut Criterion) {
     let mut rng = Pcg64::seed_from_u64(SEED);
 
     let mut group = c.benchmark_group("Finds");
-    for i in [10_000, 100_000, 300_000, 500_000, 1_000_000].iter() {
-        let mut keys: Vec<u64> = vec![0; *i as usize];
+    for i in (200_000..4_000_001).step_by(200_000) {
+        let mut keys: Vec<u64> = vec![0; i];
         rng.fill(&mut keys[..]);
         let mut art = ARTree::<u64, u64>::new();
         let mut hmap = HashMap::<u64, u64>::new();
         let mut btree = BTreeMap::<u64, u64>::new();
 
         for key in keys.iter() {
-            art.insert_or_update(*key, *key + 1);
+            art.insert(*key, *key + 1);
             hmap.insert(*key, *key + 1);
             btree.insert(*key, *key + 1);
         }

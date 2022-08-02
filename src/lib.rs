@@ -24,29 +24,29 @@ mod tests {
     fn string_art() {
         let mut art: ARTree<String, u32> = ARTree::new();
 
-        art.insert_or_update(String::from("Jason"), 26);
-        art.insert_or_update(String::from("Drake"), 21);
-        art.insert_or_update(String::from("Nathaniel"), 54);
-        art.insert_or_update(String::from("Velma"), 22);
-        art.insert_or_update(String::from("Sabrina"), 55);
-        art.insert_or_update(String::from("Mary"), 75);
-        art.insert_or_update(String::from("Caleb"), 75);
-        art.insert_or_update(String::from("Keith"), 75);
-        art.insert_or_update(String::from("Linda"), 75);
-        art.insert_or_update(String::from("Tina"), 75);
-        art.insert_or_update(String::from("Emily"), 75);
-        art.insert_or_update(String::from("Gordon"), 75);
-        art.insert_or_update(String::from("Anna"), 75);
-        art.insert_or_update(String::from("Haley"), 75);
-        art.insert_or_update(String::from("Bruce"), 75);
-        art.insert_or_update(String::from("Zane"), 75);
-        art.insert_or_update(String::from("Wendell"), 33);
-        art.insert_or_update(String::from("Rusty"), 44);
-        art.insert_or_update(String::from("Jerry"), 23);
-        art.insert_or_update(String::from("Jenny"), 23);
-        art.insert_or_update(String::from("Jenson"), 23);
-        art.insert_or_update(String::from("Jen"), 50);
-        art.insert_or_update(String::from("Wendell"), 50);
+        art.insert(String::from("Jason"), 26);
+        art.insert(String::from("Drake"), 21);
+        art.insert(String::from("Nathaniel"), 54);
+        art.insert(String::from("Velma"), 22);
+        art.insert(String::from("Sabrina"), 55);
+        art.insert(String::from("Mary"), 75);
+        art.insert(String::from("Caleb"), 75);
+        art.insert(String::from("Keith"), 75);
+        art.insert(String::from("Linda"), 75);
+        art.insert(String::from("Tina"), 75);
+        art.insert(String::from("Emily"), 75);
+        art.insert(String::from("Gordon"), 75);
+        art.insert(String::from("Anna"), 75);
+        art.insert(String::from("Haley"), 75);
+        art.insert(String::from("Bruce"), 75);
+        art.insert(String::from("Zane"), 75);
+        art.insert(String::from("Wendell"), 33);
+        art.insert(String::from("Rusty"), 44);
+        art.insert(String::from("Jerry"), 23);
+        art.insert(String::from("Jenny"), 23);
+        art.insert(String::from("Jenson"), 23);
+        art.insert(String::from("Jen"), 50);
+        art.insert(String::from("Wendell"), 50);
 
         assert_eq!(26, *art.find(String::from("Jason")).unwrap());
         assert_eq!(21, *art.find(String::from("Drake")).unwrap());
@@ -93,7 +93,7 @@ mod tests {
 
 
         for &key in keys.iter() {
-            art.insert_or_update(key, key + 1);
+            art.insert(key, key + 1);
         }
 
         for &key in keys.iter() {
@@ -128,7 +128,7 @@ mod tests {
 
 
         for &key in keys.iter() {
-            art.insert_or_update(key, key + 1);
+            art.insert(key, key + 1);
         }
     }
 }

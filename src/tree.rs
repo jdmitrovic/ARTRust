@@ -18,7 +18,7 @@ impl<K: ARTKey, V> ARTree<K, V> {
         }
     }
 
-    pub fn insert_or_update(&mut self, key: K, value: V) -> Option<V> {
+    pub fn insert(&mut self, key: K, value: V) -> Option<V> {
         let bytes = key.convert_to_bytes();
         let key_bytes = bytes.as_ref();
         let key_len = key_bytes.len();

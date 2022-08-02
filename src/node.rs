@@ -1,5 +1,5 @@
 use crate::keys::ByteKey;
-use std::{iter::zip, simd::ToBitMask};
+use std::iter::zip;
 use std::ptr::addr_of_mut;
 use std::simd::u8x16;
 use std::simd::Simd;
