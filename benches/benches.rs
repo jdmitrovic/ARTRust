@@ -25,19 +25,19 @@ fn btree_insert(btree: &mut BTreeMap<u64, u64>, keys: &Vec<u64>) {
     }
 }
 
-fn art_find(art: &mut ARTree<u64, u64>, keys: &Vec<u64>) {
+fn art_get(art: &mut ARTree<u64, u64>, keys: &Vec<u64>) {
     for key in keys.iter() {
-        assert_eq!(*key + 1, *art.find(*key).unwrap());
+        assert_eq!(*key + 1, *art.get(*key).unwrap());
     }
 }
 
-fn hmap_find(hmap: &mut HashMap<u64, u64>, keys: &Vec<u64> ) {
+fn hmap_get(hmap: &mut HashMap<u64, u64>, keys: &Vec<u64> ) {
     for key in keys.iter() {
         assert_eq!(*key + 1, *hmap.get(key).unwrap());
     }
 }
 
-fn btree_find(btree: &mut BTreeMap<u64, u64>, keys: &Vec<u64>) {
+fn btree_get(btree: &mut BTreeMap<u64, u64>, keys: &Vec<u64>) {
     for key in keys.iter() {
         assert_eq!(*key + 1, *btree.get(key).unwrap());
     }
@@ -64,10 +64,10 @@ fn bench_inserts(c: &mut Criterion) {
     group.finish();
 }
 
-fn bench_finds(c: &mut Criterion) {
+fn bench_gets(c: &mut Criterion) {
     let mut rng = Pcg64::seed_from_u64(SEED);
 
-    let mut group = c.benchmark_group("Finds");
+    let mut group = c.benchmark_group("Gets");
     for i in (200_000..4_000_001).step_by(200_000) {
         let mut keys: Vec<u64> = vec![0; i];
         rng.fill(&mut keys[..]);
@@ -82,14 +82,14 @@ fn bench_finds(c: &mut Criterion) {
         }
 
         group.bench_with_input(BenchmarkId::new("ART", i), &keys,
-            |b, k| b.iter(|| art_find(&mut art, k)));
+            |b, k| b.iter(|| art_get(&mut art, k)));
         group.bench_with_input(BenchmarkId::new("HashMap", i), &keys,
-            |b, k| b.iter(|| hmap_find(&mut hmap, k)));
+            |b, k| b.iter(|| hmap_get(&mut hmap, k)));
         group.bench_with_input(BenchmarkId::new("BTree", i), &keys,
-            |b, k| b.iter(|| btree_find(&mut btree, k)));
+            |b, k| b.iter(|| btree_get(&mut btree, k)));
     }
     group.finish();
 }
 
-criterion_group!(benches, bench_inserts, bench_finds);
+criterion_group!(benches, bench_inserts, bench_gets);
 criterion_main!(benches);

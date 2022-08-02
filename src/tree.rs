@@ -220,7 +220,7 @@ impl<K: ARTKey, V> ARTree<K, V> {
         }
     }
 
-    pub fn find(&self, key: K) -> Option<&V> {
+    pub fn get(&self, key: K) -> Option<&V> {
         let key_bytes = key.convert_to_bytes();
         let key_bytes = key_bytes.as_ref();
         let key_len = key_bytes.len();

@@ -48,17 +48,17 @@ mod tests {
         art.insert(String::from("Jen"), 50);
         art.insert(String::from("Wendell"), 50);
 
-        assert_eq!(26, *art.find(String::from("Jason")).unwrap());
-        assert_eq!(21, *art.find(String::from("Drake")).unwrap());
-        assert_eq!(54, *art.find(String::from("Nathaniel")).unwrap());
-        assert_eq!(22, *art.find(String::from("Velma")).unwrap());
-        assert_eq!(55, *art.find(String::from("Sabrina")).unwrap());
-        assert_eq!(44, *art.find(String::from("Rusty")).unwrap());
-        assert_eq!(23, *art.find(String::from("Jerry")).unwrap());
-        assert_eq!(23, *art.find(String::from("Jenny")).unwrap());
-        assert_eq!(23, *art.find(String::from("Jenson")).unwrap());
-        assert_eq!(50, *art.find(String::from("Jen")).unwrap());
-        assert_eq!(50, *art.find(String::from("Wendell")).unwrap());
+        assert_eq!(26, *art.get(String::from("Jason")).unwrap());
+        assert_eq!(21, *art.get(String::from("Drake")).unwrap());
+        assert_eq!(54, *art.get(String::from("Nathaniel")).unwrap());
+        assert_eq!(22, *art.get(String::from("Velma")).unwrap());
+        assert_eq!(55, *art.get(String::from("Sabrina")).unwrap());
+        assert_eq!(44, *art.get(String::from("Rusty")).unwrap());
+        assert_eq!(23, *art.get(String::from("Jerry")).unwrap());
+        assert_eq!(23, *art.get(String::from("Jenny")).unwrap());
+        assert_eq!(23, *art.get(String::from("Jenson")).unwrap());
+        assert_eq!(50, *art.get(String::from("Jen")).unwrap());
+        assert_eq!(50, *art.get(String::from("Wendell")).unwrap());
 
         art.delete(String::from("Jenny"));
         art.delete(String::from("Jason"));
@@ -66,24 +66,24 @@ mod tests {
         art.delete(String::from("Caleb"));
         art.delete(String::from("Drake"));
 
-        assert_eq!(None, art.find(String::from("Drake")));
-        assert_eq!(None, art.find(String::from("Jenny")));
-        assert_eq!(None, art.find(String::from("Jason")));
-        assert_eq!(None, art.find(String::from("Jen")));
-        assert_eq!(None, art.find(String::from("Caleb")));
+        assert_eq!(None, art.get(String::from("Drake")));
+        assert_eq!(None, art.get(String::from("Jenny")));
+        assert_eq!(None, art.get(String::from("Jason")));
+        assert_eq!(None, art.get(String::from("Jen")));
+        assert_eq!(None, art.get(String::from("Caleb")));
 
-        assert_eq!(54, *art.find(String::from("Nathaniel")).unwrap());
-        assert_eq!(22, *art.find(String::from("Velma")).unwrap());
-        assert_eq!(55, *art.find(String::from("Sabrina")).unwrap());
-        assert_eq!(44, *art.find(String::from("Rusty")).unwrap());
-        assert_eq!(23, *art.find(String::from("Jerry")).unwrap());
-        assert_eq!(23, *art.find(String::from("Jenson")).unwrap());
-        assert_eq!(50, *art.find(String::from("Wendell")).unwrap());
+        assert_eq!(54, *art.get(String::from("Nathaniel")).unwrap());
+        assert_eq!(22, *art.get(String::from("Velma")).unwrap());
+        assert_eq!(55, *art.get(String::from("Sabrina")).unwrap());
+        assert_eq!(44, *art.get(String::from("Rusty")).unwrap());
+        assert_eq!(23, *art.get(String::from("Jerry")).unwrap());
+        assert_eq!(23, *art.get(String::from("Jenson")).unwrap());
+        assert_eq!(50, *art.get(String::from("Wendell")).unwrap());
     }
 
 
     #[test]
-    fn insert_update_delete_find() {
+    fn insert_update_delete_get() {
         const SEED: u64 = 10;
 
         let mut rng = Pcg64::seed_from_u64(SEED);
@@ -97,7 +97,7 @@ mod tests {
         }
 
         for &key in keys.iter() {
-            assert_eq!(key + 1, *art.find(key).unwrap());
+            assert_eq!(key + 1, *art.get(key).unwrap());
         }
 
         const SEED_DEL: u64 = 13;
@@ -110,9 +110,9 @@ mod tests {
 
         for &key in keys.iter() {
             if key % SEED_DEL == 0 {
-                assert_eq!(None, art.find(key));
+                assert_eq!(None, art.get(key));
             } else {
-                assert_eq!(key + 1, *art.find(key).unwrap());
+                assert_eq!(key + 1, *art.get(key).unwrap());
             }
         }
     }
