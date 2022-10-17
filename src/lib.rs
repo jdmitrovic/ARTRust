@@ -117,18 +117,18 @@ mod tests {
         }
     }
 
-    #[test]
-    fn insert_profiling() {
-        const SEED: u64 = 10;
+    // #[test]
+    // fn insert_profiling() {
+    //     const SEED: u64 = 10;
 
-        let mut rng = Pcg64::seed_from_u64(SEED);
-        let mut keys: Vec<u64> = vec![0; 1_000_000];
-        rng.fill(&mut keys[..]);
-        let mut art = ARTree::<u64, u64>::new();
+    //     let mut rng = Pcg64::seed_from_u64(SEED);
+    //     let mut keys: Vec<u64> = vec![0; 1_000_000];
+    //     rng.fill(&mut keys[..]);
+    //     let mut art = ARTree::<u64, u64>::new();
 
 
-        for &key in keys.iter() {
-            art.insert(key, key + 1);
-        }
-    }
+    //     for &key in keys.iter() {
+    //         art.insert(key, key + 1);
+    //     }
+    // }
 }
